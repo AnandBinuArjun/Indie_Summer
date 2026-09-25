@@ -29,7 +29,6 @@ html {
   font-family: var(--font-sans);
   background-color: var(--color-ink);
   color: var(--color-ivory);
-  scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -40,6 +39,7 @@ body {
   color: var(--color-ivory);
   min-height: 100vh;
   line-height: 1.5;
+  scroll-behavior: smooth;
 }
 
 /* When viewing light pages (shop, archive, about, faq) */

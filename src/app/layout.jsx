@@ -2,6 +2,7 @@ import "./globals.css";
 import { StoreProvider } from "../context/StoreContext";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import MarqueeBar from "../components/MarqueeBar";
 import CartDrawer from "../components/CartDrawer";
 import WishlistDrawer from "../components/WishlistDrawer";
 import SearchModal from "../components/SearchModal";
@@ -37,7 +38,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -49,21 +50,7 @@ export default function RootLayout({ children }) {
       <body>
         <StoreProvider>
           {/* Top Announcement Bar */}
-          <div className="top-marquee">
-            <div className="marquee-track">
-              <span>ONE DESIGN. ONE PIECE. NEVER AGAIN.</span>
-              <span>•</span>
-              <span>CRAFTED FROM VINTAGE INDIAN SAREES, DUPATTAS & HANDWORKED TEXTILES</span>
-              <span>•</span>
-              <span>SLOW BATCHES · SINGULAR PIECES · ZERO WASTE</span>
-              <span>•</span>
-              <span>A SECOND LIFE FOR BEAUTIFUL THINGS</span>
-              <span>•</span>
-              <span>COMPLIMENTARY EXPRESS DELIVERY ACROSS INDIA ON ORDERS OVER ₹5,000</span>
-              <span>•</span>
-              <span>ONE DESIGN. ONE PIECE. NEVER AGAIN.</span>
-            </div>
-          </div>
+          <MarqueeBar />
 
           {/* Universal Header */}
           <Navbar />

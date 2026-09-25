@@ -16,19 +16,13 @@ export default function CheckoutModal() {
     formatPrice
   } = useStore();
 
-  const total = getCartTotal();
-  const onClose = () => setCheckoutOpen(false);
-  const onOrderComplete = clearCart;
-
-  if (!checkoutOpen) return null;
-
+  // All hooks MUST be declared before any early return (Rules of Hooks)
   const [paymentMethod, setPaymentMethod] = useState("upi"); // 'upi', 'card', 'netbanking'
   const [upiId, setUpiId] = useState("ananya@okhdfcbank");
   const [selectedBank, setSelectedBank] = useState("HDFC Bank");
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderRef, setOrderRef] = useState("");
-
   const [formData, setFormData] = useState({
     firstName: "Ananya",
     lastName: "Singhania",
@@ -42,6 +36,12 @@ export default function CheckoutModal() {
     expiry: "09/29",
     cvv: "•••"
   });
+
+  const total = getCartTotal();
+  const onClose = () => setCheckoutOpen(false);
+  const onOrderComplete = clearCart;
+
+  if (!checkoutOpen) return null;
 
 
   const handlePlaceOrder = (e) => {

@@ -1,8 +1,23 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { PRODUCTS as INITIAL_PRODUCTS } from "../data/products";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const StoreContext = createContext(null);
+
+const DEFAULT_SETTINGS = {
+  marqueeTicker: "ONE DESIGN. ONE PIECE. NEVER AGAIN. · COMPLIMENTARY BLUEDART AIR SHIPPING ACROSS INDIA · SLOW BATCHES · DISCOVERED VINTAGE SILKS · ZERO WASTE ATELIER",
+  heroTitle: "A SECOND LIFE FOR BEAUTIFUL THINGS.",
+  heroSubtitle: "Crafted from vintage Indian sarees, dupattas and handworked textiles. Once it’s gone, that exact piece will never exist again.",
+  heroTagline: "SLOW BATCHES · SINGULAR PIECES · ZERO WASTE",
+  currentVolume: "VOL. 001",
+  dropStatus: "LIVE FOR ACQUISITION",
+  promoCode: "INDIE10",
+  promoDiscount: 10,
+  phoneContact: "+91 98200 45892",
+  emailContact: "atelier@indiesummer.in"
+};
 
 export function StoreProvider({ children }) {
   const [currency, setCurrency] = useState("INR");
@@ -13,9 +28,14 @@ export function StoreProvider({ children }) {
   const [activeQuickViewProduct, setActiveQuickViewProduct] = useState(null);
   const [discount, setDiscount] = useState(0);
 
+  // Products & Site Settings
+  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS);
+
   // Safe client-side storage hydration
   const [cart, setCart] = useState([]);
   const [wishlist, setWishlist] = useState([]);
+  const [bidsData, setBidsData] = useState({});
 
   useEffect(() => {
     try {
@@ -24,9 +44,93 @@ export function StoreProvider({ children }) {
 
       const savedWishlist = localStorage.getItem("indie_summer_wishlist");
       if (savedWishlist) setWishlist(JSON.parse(savedWishlist));
+
+      const savedBids = localStorage.getItem("indie_summer_bids");
+      if (savedBids) setBidsData(JSON.parse(savedBids));
+
+      const savedSettings = localStorage.getItem("indie_summer_settings");
+      if (savedSettings) setSiteSettings(JSON.parse(savedSettings));
+
+      const savedProducts = localStorage.getItem("indie_summer_products");
+      if (savedProducts) setProducts(JSON.parse(savedProducts));
     } catch (e) {
       console.warn("Storage hydration error", e);
     }
+  }, []);
+
+  // Fetch live from Supabase if configured
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    async function loadFromSupabase() {
+      try {
+        // Fetch products
+        const { data: supaProducts, error: prodErr } = await supabase
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (!prodErr && supaProducts && supaProducts.length > 0) {
+          const mapped = supaProducts.map((p) => ({
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            priceINR: Number(p.price_inr),
+            priceUSD: Number(p.price_usd || 0),
+            priceEUR: Number(p.price_eur || 0),
+            priceGBP: Number(p.price_gbp || 0),
+            priceAED: Number(p.price_aed || 0),
+            category: p.category,
+            isOneOfOne: p.is_one_of_one,
+            isBidding: p.is_bidding,
+            startingBidINR: Number(p.starting_bid_inr || 0),
+            currentBidINR: Number(p.current_bid_inr || p.price_inr),
+            minBidIncrementINR: Number(p.min_bid_increment_inr || 500),
+            bidsCount: p.bids_count || 0,
+            edition: p.edition,
+            status: p.status,
+            material: p.material,
+            origin: p.origin,
+            color: p.color,
+            colorHex: p.color_hex,
+            sizes: Array.isArray(p.sizes) ? p.sizes : ["XS", "S", "M"],
+            imagePrimary: p.image_primary,
+            imageSecondary: p.image_secondary,
+            description: p.description,
+            details: Array.isArray(p.details) ? p.details : []
+          }));
+          setProducts(mapped);
+          localStorage.setItem("indie_summer_products", JSON.stringify(mapped));
+        }
+
+        // Fetch site settings
+        const { data: supaSettings, error: setErr } = await supabase
+          .from("site_settings")
+          .select("*");
+
+        if (!setErr && supaSettings && supaSettings.length > 0) {
+          const merged = { ...DEFAULT_SETTINGS };
+          supaSettings.forEach((item) => {
+            if (item.key === "marquee_ticker") merged.marqueeTicker = item.value;
+            if (item.key === "hero_title") merged.heroTitle = item.value;
+            if (item.key === "hero_subtitle") merged.heroSubtitle = item.value;
+            if (item.key === "hero_tagline") merged.heroTagline = item.value;
+            if (item.key === "current_volume") merged.currentVolume = item.value;
+            if (item.key === "drop_status") merged.dropStatus = item.value;
+            if (item.key === "promo_code") merged.promoCode = item.value;
+            if (item.key === "promo_discount") merged.promoDiscount = Number(item.value);
+            if (item.key === "phone_contact") merged.phoneContact = item.value;
+            if (item.key === "email_contact") merged.emailContact = item.value;
+          });
+          setSiteSettings(merged);
+          localStorage.setItem("indie_summer_settings", JSON.stringify(merged));
+        }
+      } catch (err) {
+        console.warn("Supabase load notice:", err);
+      }
+    }
+
+    loadFromSupabase();
   }, []);
 
   useEffect(() => {
@@ -44,6 +148,16 @@ export function StoreProvider({ children }) {
       console.warn("Wishlist storage error", e);
     }
   }, [wishlist]);
+
+  useEffect(() => {
+    try {
+      if (Object.keys(bidsData).length > 0) {
+        localStorage.setItem("indie_summer_bids", JSON.stringify(bidsData));
+      }
+    } catch (e) {
+      console.warn("Bids save error", e);
+    }
+  }, [bidsData]);
 
   // Keyboard shortcut (Cmd+K / Ctrl+K)
   useEffect(() => {
@@ -63,7 +177,6 @@ export function StoreProvider({ children }) {
         (it) => it.id === productWithSize.id && it.selectedSize === productWithSize.selectedSize
       );
       if (existing) {
-        if (productWithSize.isOneOfOne) return prev;
         return prev.map((it) =>
           it.id === productWithSize.id && it.selectedSize === productWithSize.selectedSize
             ? { ...it, quantity: it.quantity + 1 }
@@ -75,22 +188,22 @@ export function StoreProvider({ children }) {
     setCartOpen(true);
   };
 
-  const updateQty = (id, selectedSize, newQty) => {
-    if (newQty <= 0) {
-      removeFromCart(id, selectedSize);
-      return;
-    }
+  const updateQty = (id, selectedSize, delta) => {
     setCart((prev) =>
-      prev.map((it) =>
-        it.id === id && it.selectedSize === selectedSize ? { ...it, quantity: newQty } : it
-      )
+      prev
+        .map((it) => {
+          if (it.id === id && it.selectedSize === selectedSize) {
+            const nextQty = it.quantity + delta;
+            return nextQty > 0 ? { ...it, quantity: nextQty } : null;
+          }
+          return it;
+        })
+        .filter(Boolean)
     );
   };
 
   const removeFromCart = (id, selectedSize) => {
-    setCart((prev) =>
-      prev.filter((it) => !(it.id === id && it.selectedSize === selectedSize))
-    );
+    setCart((prev) => prev.filter((it) => !(it.id === id && it.selectedSize === selectedSize)));
   };
 
   const toggleWishlist = (product) => {
@@ -98,9 +211,8 @@ export function StoreProvider({ children }) {
       const exists = prev.some((it) => it.id === product.id);
       if (exists) {
         return prev.filter((it) => it.id !== product.id);
-      } else {
-        return [...prev, product];
       }
+      return [...prev, product];
     });
   };
 
@@ -109,7 +221,7 @@ export function StoreProvider({ children }) {
       ...product,
       selectedSize: product.sizes?.[0] || "One Size"
     });
-    setWishlist((prev) => prev.filter((it) => it.id !== product.id));
+    toggleWishlist(product);
   };
 
   const cartTotalItems = cart.reduce((acc, it) => acc + it.quantity, 0);
@@ -147,28 +259,6 @@ export function StoreProvider({ children }) {
     return Math.max(0, sub - disc);
   };
 
-  // Live Bidding State for auction relics
-  const [bidsData, setBidsData] = useState({});
-
-  useEffect(() => {
-    try {
-      const savedBids = localStorage.getItem("indie_summer_bids");
-      if (savedBids) setBidsData(JSON.parse(savedBids));
-    } catch (e) {
-      console.warn("Bids storage error", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (Object.keys(bidsData).length > 0) {
-        localStorage.setItem("indie_summer_bids", JSON.stringify(bidsData));
-      }
-    } catch (e) {
-      console.warn("Bids save error", e);
-    }
-  }, [bidsData]);
-
   const getBiddingInfo = (product) => {
     if (!product || !product.isBidding) return null;
     const dynamic = bidsData[product.id];
@@ -188,7 +278,7 @@ export function StoreProvider({ children }) {
     };
   };
 
-  const placeBid = (product, bidAmountINR, bidderName = "You (Verified Patron)") => {
+  const placeBid = async (product, bidAmountINR, bidderName = "You (Verified Patron)") => {
     const info = getBiddingInfo(product);
     if (!info) return { success: false, message: "This piece is not open for bidding." };
 
@@ -220,7 +310,161 @@ export function StoreProvider({ children }) {
       };
     });
 
+    // Update in products state as well
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === product.id
+          ? {
+              ...p,
+              currentBidINR: bidAmountINR,
+              bidsCount: (p.bidsCount || 0) + 1
+            }
+          : p
+      )
+    );
+
+    // Sync to Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("bids").insert({
+          product_id: product.id,
+          bidder_name: bidderName,
+          amount_inr: bidAmountINR
+        });
+
+        await supabase
+          .from("products")
+          .update({
+            current_bid_inr: bidAmountINR,
+            bids_count: (info.bidsCount || 0) + 1
+          })
+          .eq("id", product.id);
+      } catch (e) {
+        console.warn("Supabase bid insert note:", e);
+      }
+    }
+
     return { success: true, bid: newBid, newAmount: bidAmountINR };
+  };
+
+  // ADMIN ACTIONS: Update Settings
+  const updateSiteSettings = async (newSettings) => {
+    setSiteSettings(newSettings);
+    localStorage.setItem("indie_summer_settings", JSON.stringify(newSettings));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const rows = [
+          { key: "marquee_ticker", value: JSON.stringify(newSettings.marqueeTicker) },
+          { key: "hero_title", value: JSON.stringify(newSettings.heroTitle) },
+          { key: "hero_subtitle", value: JSON.stringify(newSettings.heroSubtitle) },
+          { key: "hero_tagline", value: JSON.stringify(newSettings.heroTagline) },
+          { key: "current_volume", value: JSON.stringify(newSettings.currentVolume) },
+          { key: "drop_status", value: JSON.stringify(newSettings.dropStatus) },
+          { key: "promo_code", value: JSON.stringify(newSettings.promoCode) },
+          { key: "promo_discount", value: JSON.stringify(newSettings.promoDiscount) },
+          { key: "phone_contact", value: JSON.stringify(newSettings.phoneContact) },
+          { key: "email_contact", value: JSON.stringify(newSettings.emailContact) }
+        ];
+        await supabase.from("site_settings").upsert(rows);
+      } catch (err) {
+        console.warn("Supabase settings sync error:", err);
+      }
+    }
+  };
+
+  // ADMIN ACTIONS: Product Management
+  const updateProduct = async (updated) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+      localStorage.setItem("indie_summer_products", JSON.stringify(next));
+      return next;
+    });
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from("products")
+          .update({
+            name: updated.name,
+            price_inr: updated.priceINR,
+            category: updated.category,
+            is_bidding: updated.isBidding,
+            current_bid_inr: updated.currentBidINR,
+            min_bid_increment_inr: updated.minBidIncrementINR || 500,
+            status: updated.status,
+            material: updated.material,
+            origin: updated.origin,
+            description: updated.description
+          })
+          .eq("id", updated.id);
+      } catch (err) {
+        console.warn("Supabase product update error:", err);
+      }
+    }
+  };
+
+  const addProduct = async (newProduct) => {
+    const completeProd = {
+      id: newProduct.id || `is-${String(products.length + 1).padStart(3, "0")}`,
+      code: newProduct.code || `VINTAGE SAREE / PIECE ${String(products.length + 1).padStart(2, "0")}`,
+      isOneOfOne: true,
+      status: "available",
+      sizes: ["One Size"],
+      details: ["100% authentic vintage Indian textile", "One design. One piece. Never again."],
+      ...newProduct
+    };
+
+    setProducts((prev) => {
+      const next = [completeProd, ...prev];
+      localStorage.setItem("indie_summer_products", JSON.stringify(next));
+      return next;
+    });
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("products").insert({
+          id: completeProd.id,
+          code: completeProd.code,
+          name: completeProd.name,
+          price_inr: completeProd.priceINR,
+          price_usd: completeProd.priceUSD || Math.round(completeProd.priceINR / 83),
+          price_eur: completeProd.priceEUR || Math.round(completeProd.priceINR / 90),
+          price_gbp: completeProd.priceGBP || Math.round(completeProd.priceINR / 105),
+          price_aed: completeProd.priceAED || Math.round(completeProd.priceINR / 22),
+          category: completeProd.category,
+          is_one_of_one: true,
+          is_bidding: completeProd.isBidding || false,
+          starting_bid_inr: completeProd.startingBidINR || completeProd.priceINR,
+          current_bid_inr: completeProd.currentBidINR || completeProd.priceINR,
+          min_bid_increment_inr: completeProd.minBidIncrementINR || 500,
+          edition: completeProd.edition || "1 OF 1 VINTAGE SAREE GOWN",
+          status: "available",
+          material: completeProd.material,
+          origin: completeProd.origin,
+          image_primary: completeProd.imagePrimary || "/images/piece-crimson-saree.jpg",
+          description: completeProd.description
+        });
+      } catch (err) {
+        console.warn("Supabase product insert error:", err);
+      }
+    }
+  };
+
+  const deleteProduct = async (id) => {
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      localStorage.setItem("indie_summer_products", JSON.stringify(next));
+      return next;
+    });
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("products").delete().eq("id", id);
+      } catch (err) {
+        console.warn("Supabase product delete error:", err);
+      }
+    }
   };
 
   return (
@@ -254,7 +498,15 @@ export function StoreProvider({ children }) {
         clearCart: () => setCart([]),
         bidsData,
         getBiddingInfo,
-        placeBid
+        placeBid,
+        // Admin & Customization
+        products,
+        siteSettings,
+        updateSiteSettings,
+        updateProduct,
+        addProduct,
+        deleteProduct,
+        isSupabaseConfigured
       }}
     >
       {children}
