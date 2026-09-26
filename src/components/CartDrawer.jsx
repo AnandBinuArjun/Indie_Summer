@@ -16,7 +16,8 @@ export default function CartDrawer() {
     formatPrice,
     discount,
     setDiscount,
-    setCheckoutOpen
+    setCheckoutOpen,
+    siteSettings
   } = useStore();
 
   const [promoInput, setPromoInput] = useState("");
@@ -49,13 +50,18 @@ export default function CartDrawer() {
   const amountAway = Math.max(0, freeShippingThreshold - subtotal);
   const total = Math.max(0, subtotal - discountAmount);
 
+  const activePromoCode = (siteSettings?.promoCode || "INDIE10").trim().toUpperCase();
+  const activePromoDiscount = Number(siteSettings?.promoDiscount) || 10;
+
   const handleApplyPromo = (e) => {
     e.preventDefault();
-    if (promoInput.trim().toUpperCase() === "INDIE10") {
-      setDiscount(10);
-      setPromoMessage("✓ 10% Founding Client Privilege Applied");
+    const cleanInput = promoInput.trim().toUpperCase();
+    if (cleanInput === activePromoCode || cleanInput === "INDIE10") {
+      const discountToApply = cleanInput === activePromoCode ? activePromoDiscount : 10;
+      setDiscount(discountToApply);
+      setPromoMessage(`✓ ${discountToApply}% Privilege Applied`);
     } else {
-      setPromoMessage("Invalid code. Try 'INDIE10'");
+      setPromoMessage(`Invalid code. Try '${activePromoCode}'`);
     }
   };
 

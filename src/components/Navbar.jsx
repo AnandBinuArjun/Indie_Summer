@@ -247,6 +247,22 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
+
+              <Link
+                href="/track"
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "1.4rem",
+                  textAlign: "left",
+                  color: pathname === "/track" ? "var(--color-siren)" : "rgba(14, 13, 13, 0.7)",
+                  borderTop: "1px dashed var(--color-border)",
+                  paddingTop: "1rem",
+                  marginTop: "0.5rem"
+                }}
+              >
+                TRACK ORDER ↗
+              </Link>
             </div>
           </div>
         </div>

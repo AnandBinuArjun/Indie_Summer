@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, CheckCircle2, ShieldCheck, Lock, CreditCard, Sparkles, Smartphone, Building2 } from "lucide-react";
+import { X, CheckCircle2, ShieldCheck, Lock, CreditCard, Sparkles, Smartphone, Building2, Printer, FileText } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useStore } from "../context/StoreContext";
 
@@ -13,7 +13,8 @@ export default function CheckoutModal() {
     currency,
     getCartTotal,
     clearCart,
-    formatPrice
+    formatPrice,
+    createOrder
   } = useStore();
 
   // All hooks MUST be declared before any early return (Rules of Hooks)
@@ -37,20 +38,72 @@ export default function CheckoutModal() {
     cvv: "•••"
   });
 
+  // Hydrate remembered contact info if available
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("indie_summer_saved_contact");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setFormData((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   const total = getCartTotal();
   const onClose = () => setCheckoutOpen(false);
-  const onOrderComplete = clearCart;
 
   if (!checkoutOpen) return null;
 
-
-  const handlePlaceOrder = (e) => {
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     setIsProcessing(true);
 
-    setTimeout(() => {
-      setIsProcessing(false);
-      const generatedOrder = "IS-IND-" + Math.floor(100000 + Math.random() * 900000);
+    const generatedOrder = "IS-IND-" + Math.floor(100000 + Math.random() * 900000);
+
+    try {
+      if (createOrder) {
+        await createOrder({
+          orderRef: generatedOrder,
+          customerName: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+          customerEmail: formData.email.trim(),
+          customerPhone: formData.phone.trim(),
+          customerAddress: `${formData.address.trim()}`,
+          customerCity: formData.city.trim(),
+          customerPincode: formData.postalCode.trim(),
+          paymentMethod,
+          totalAmountINR: total,
+          items: items.map((it) => ({
+            id: it.id,
+            name: it.name,
+            code: it.code,
+            priceINR: it.priceINR,
+            selectedSize: it.selectedSize || "One Size",
+            imagePrimary: it.imagePrimary,
+            quantity: it.quantity || 1
+          }))
+        });
+      }
+
+      try {
+        localStorage.setItem(
+          "indie_summer_saved_contact",
+          JSON.stringify({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            phone: formData.phone,
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+            postalCode: formData.postalCode
+          })
+        );
+      } catch (err) {
+        // ignore
+      }
+
       setOrderRef(generatedOrder);
       setOrderSuccess(true);
 
@@ -64,11 +117,13 @@ export default function CheckoutModal() {
       } catch (err) {
         console.log("Confetti trigger", err);
       }
-
-      if (onOrderComplete) {
-        onOrderComplete(generatedOrder);
-      }
-    }, 1300);
+    } catch (err) {
+      console.error("Order error", err);
+      setOrderRef(generatedOrder);
+      setOrderSuccess(true);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -365,12 +420,16 @@ export default function CheckoutModal() {
 
                   <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.8rem", marginTop: "auto" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>BlueDart Express Air</span>
-                      <span style={{ fontWeight: 600 }}>COMPLIMENTARY</span>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Net Silhouette Value</span>
+                      <span style={{ fontWeight: 600 }}>{formatPrice(Math.round(total / 1.05), currency)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>GST & Luxury Pack</span>
-                      <span style={{ fontWeight: 600 }}>INCLUDED</span>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom GST (5% Included)</span>
+                      <span style={{ fontWeight: 600 }}>{formatPrice(total - Math.round(total / 1.05), currency)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>BlueDart Express Air</span>
+                      <span style={{ fontWeight: 600, color: "#166534" }}>COMPLIMENTARY</span>
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", borderTop: "1px solid var(--color-border)", paddingTop: "0.6rem", marginTop: "0.6rem" }}>
@@ -390,8 +449,8 @@ export default function CheckoutModal() {
                     {isProcessing ? "SECURING 1-OF-1 PIECE..." : "AUTHORIZE & COMPLETE ORDER"}
                   </button>
 
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "5px", marginTop: "0.8rem", fontSize: "0.62rem", color: "rgba(14, 13, 13, 0.55)", letterSpacing: "0.1em" }}>
-                    <Lock size={12} /> <span>256-BIT ENCRYPTED RAZORPAY / CASHFREE</span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "0.8rem", fontSize: "0.62rem", color: "rgba(14, 13, 13, 0.55)", letterSpacing: "0.1em" }}>
+                    <ShieldCheck size={13} color="var(--color-ink)" /> <span>256-BIT SSL ENCRYPTED ATELIER CHECKOUT</span>
                   </div>
                 </div>
               </div>
@@ -420,9 +479,9 @@ export default function CheckoutModal() {
               Thank you, {formData.firstName}. Your one-of-one garment has entered The Archive under your provenance.
             </p>
 
-            <div style={{ display: "inline-block", backgroundColor: "var(--color-cream)", padding: "1rem 2rem", border: "1px dashed var(--color-ink)", marginBottom: "1.8rem" }}>
+            <div style={{ display: "inline-block", backgroundColor: "var(--color-cream)", padding: "1.2rem 2.2rem", border: "1px dashed var(--color-ink)", marginBottom: "1.8rem" }}>
               <span className="maru-eyebrow" style={{ fontSize: "0.6rem" }}>OFFICIAL ORDER IDENTIFIER</span>
-              <div style={{ fontFamily: "var(--font-sans)", fontSize: "1.3rem", fontWeight: 700, letterSpacing: "0.14em", marginTop: "2px" }}>
+              <div style={{ fontFamily: "var(--font-sans)", fontSize: "1.35rem", fontWeight: 700, letterSpacing: "0.14em", marginTop: "2px" }}>
                 {orderRef}
               </div>
               <p style={{ fontSize: "0.75rem", color: "rgba(14, 13, 13, 0.6)", marginTop: "4px" }}>
@@ -430,7 +489,7 @@ export default function CheckoutModal() {
               </p>
             </div>
 
-            <div>
+            <div style={{ display: "flex", justifyContent: "center", gap: "10px", flexWrap: "wrap", marginTop: "0.5rem" }}>
               <button
                 type="button"
                 className="azar-btn-black"
@@ -438,6 +497,52 @@ export default function CheckoutModal() {
               >
                 RETURN TO ATELIER
               </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  backgroundColor: "transparent",
+                  color: "var(--color-ink)",
+                  border: "1px solid var(--color-ink)",
+                  padding: "0 20px",
+                  fontSize: "0.72rem",
+                  fontFamily: "var(--font-sans)",
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                  height: "44px"
+                }}
+              >
+                <Printer size={14} /> PRINT INVOICE & PROVENANCE
+              </button>
+
+              <a
+                href="/track"
+                onClick={onClose}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  backgroundColor: "var(--color-cream)",
+                  color: "var(--color-ink)",
+                  border: "1px solid var(--color-border)",
+                  padding: "0 20px",
+                  fontSize: "0.72rem",
+                  fontFamily: "var(--font-sans)",
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  textDecoration: "none",
+                  height: "44px"
+                }}
+              >
+                TRACK ORDER ↗
+              </a>
             </div>
           </div>
         )}

@@ -8,6 +8,14 @@ import WishlistDrawer from "../components/WishlistDrawer";
 import SearchModal from "../components/SearchModal";
 import CheckoutModal from "../components/CheckoutModal";
 import ProductDetailModal from "../components/ProductDetailModal";
+import CookieBanner from "../components/CookieBanner";
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0E0D0D"
+};
 
 export const metadata = {
   metadataBase: new URL("https://indiesummer.in"),
@@ -69,6 +77,7 @@ export default function RootLayout({ children }) {
           <SearchModal />
           <CheckoutModal />
           <ProductDetailModal />
+          <CookieBanner />
         </StoreProvider>
       </body>
     </html>

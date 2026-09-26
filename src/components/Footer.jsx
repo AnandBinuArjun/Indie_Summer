@@ -80,7 +80,17 @@ export default function Footer() {
               </li>
               <li>
                 <Link href="/faq" style={{ color: "rgba(14, 13, 13, 0.8)" }}>
-                  Client Care & Shipping
+                  Client Care & FAQ
+                </Link>
+              </li>
+              <li>
+                <Link href="/track" style={{ color: "rgba(14, 13, 13, 0.8)" }}>
+                  Track Your Order
+                </Link>
+              </li>
+              <li>
+                <Link href="/shipping-returns" style={{ color: "rgba(14, 13, 13, 0.8)" }}>
+                  Shipping & Returns
                 </Link>
               </li>
             </ul>
@@ -180,8 +190,14 @@ export default function Footer() {
             © 2026 INDIE SUMMER. ONE DESIGN. ONE PIECE. NEVER AGAIN.
           </p>
 
-          <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(14, 13, 13, 0.6)" }}>
-            <span>Zero Waste · Vintage Saree Heritage · Handcrafted in India</span>
+          <div style={{ display: "flex", gap: "1.2rem", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(14, 13, 13, 0.6)", flexWrap: "wrap" }}>
+            <Link href="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy Policy</Link>
+            <span>·</span>
+            <Link href="/terms" style={{ color: "inherit", textDecoration: "none" }}>Terms</Link>
+            <span>·</span>
+            <Link href="/shipping-returns" style={{ color: "inherit", textDecoration: "none" }}>Shipping & Returns</Link>
+            <span>·</span>
+            <Link href="/admin" style={{ color: "rgba(14, 13, 13, 0.4)", textDecoration: "none" }}>Atelier Admin</Link>
           </div>
         </div>
       </div>

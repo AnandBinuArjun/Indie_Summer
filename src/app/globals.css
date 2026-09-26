@@ -729,3 +729,17 @@ body.light-theme ::-webkit-scrollbar-thumb {
   }
 }
 
+/* Responsive Admin Grid */
+.admin-2col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+@media (max-width: 768px) {
+  .admin-2col-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+}
+
+
