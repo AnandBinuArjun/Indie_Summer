@@ -743,6 +743,28 @@ body.light-theme ::-webkit-scrollbar-thumb {
     padding-left: 1rem !important;
     padding-right: 1rem !important;
   }
+
+  /* Concierge Floating Pill Responsiveness */
+  .concierge-pill-label {
+    display: none !important;
+  }
+  .concierge-container {
+    bottom: 18px !important;
+    right: 18px !important;
+  }
+  .concierge-trigger-btn {
+    padding: 12px !important;
+    border-radius: 50% !important;
+    width: 48px !important;
+    height: 48px !important;
+    justify-content: center !important;
+  }
+  .concierge-popover {
+    width: calc(100vw - 36px) !important;
+    max-width: 320px !important;
+    right: 0 !important;
+    bottom: 60px !important;
+  }
 }
 
 

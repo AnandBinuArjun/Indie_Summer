@@ -46,7 +46,7 @@ export default function PatronTestimonials() {
       style={{
         backgroundColor: "var(--color-ink)",
         color: "var(--color-ivory)",
-        padding: "6.5rem 0",
+        padding: "7.5rem 0 6.5rem 0",
         position: "relative",
         borderTop: "1px solid rgba(251, 251, 247, 0.12)"
       }}

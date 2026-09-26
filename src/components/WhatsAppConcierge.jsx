@@ -35,6 +35,7 @@ export default function WhatsAppConcierge() {
 
   return (
     <div
+      className="concierge-container"
       style={{
         position: "fixed",
         bottom: "24px",
@@ -46,6 +47,7 @@ export default function WhatsAppConcierge() {
       {/* Popover Card */}
       {isOpen && (
         <div
+          className="concierge-popover"
           style={{
             position: "absolute",
             bottom: "64px",
@@ -130,6 +132,7 @@ export default function WhatsAppConcierge() {
       {/* Floating Pill Trigger */}
       <button
         type="button"
+        className="concierge-trigger-btn"
         onClick={() => setIsOpen(!isOpen)}
         style={{
           display: "flex",
@@ -147,7 +150,10 @@ export default function WhatsAppConcierge() {
         aria-label="Atelier WhatsApp Concierge"
       >
         <MessageCircle size={16} color="#25D366" />
-        <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+        <span
+          className="concierge-pill-label"
+          style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase" }}
+        >
           ATELIER CONCIERGE
         </span>
       </button>
