@@ -68,18 +68,26 @@ graph TD
 3. Every garment is guaranteed **1-of-1**: when purchased, its status transitions to `"sold"` across the storefront.
 
 ### B. Live Atelier Auctions & Bidding Portal
-1. Select archival relics feature live auction bidding with countdown deadlines (`auction_end_time`).
+1. Select archival relics feature live auction bidding with real-time countdown deadlines (`products.auction_end_time`).
 2. Patrons submit offers on `/product/[id]`. The engine enforces a **minimum ₹500 increment** over the leading bid.
 3. Bids are written to Supabase `public.bids` and update `products.current_bid_inr` and `products.bids_count`.
-4. When atelier staff clicks **"Award Piece & Close Auction"** in `/admin`:
+4. **Countdown Expiration & Lockout:** When `Date.now() >= auction_end_time`, the client displays `AUCTION CONCLUDED`, disables quick bid pills, disables custom inputs, and blocks bid submission.
+5. When atelier staff clicks **"Award Piece & Close Auction"** in `/admin`:
    * The winning bid and bid count are **preserved** (never wiped to 0).
    * The relic is marked `status: "reserved"`.
    * A settlement order (`AUC-WIN-XXXX`) is automatically generated in `public.orders` so the atelier can issue invoices and prepare express transit.
 
-### C. Checkout & Order Lifecycle
-1. Customer enters dispatch coordinates and selects UPI, Card, or Netbanking in `CheckoutModal.jsx`.
-2. Calculates exact 5% Handloom GST and applies dynamic promo codes managed from the admin CMS.
-3. Calls `createOrder()`, generating an official reference (`IS-IND-XXXXXX`) written simultaneously to Supabase `public.orders` and locally cached via `src/lib/orderStorage.js`.
+### C. Checkout, Tax & Payment Gateway Lifecycle (Razorpay)
+1. Customer enters dispatch coordinates in `CheckoutModal.jsx`.
+2. **Dynamic Indian Handloom GST Calculation:**
+   * Automatically derives Net Silhouette Value (`Math.round(total / 1.05)`) and 5% Handloom GST.
+   * Splits tax lines by destination: **Intra-State (Goa)**: 2.5% CGST + 2.5% SGST; **Inter-State**: 5.0% IGST.
+   * Complimentary express air routing via BlueDart (2–3 business days).
+3. **Two-Phase Cryptographic Payment Authorization:**
+   * Client calls `/api/payment/create-order` with the calculated cart total in paise.
+   * Opens the official Razorpay Checkout SDK (supporting UPI, Google Pay, PhonePe, Cards, Netbanking).
+   * Upon successful payment, client posts the payment credentials to `/api/payment/verify` for server-side HMAC-SHA256 signature verification.
+   * **Inventory Protection:** Orders are persisted to `public.orders` and 1-of-1 relics marked `"sold"` **only after cryptographic payment verification passes**. If payment is abandoned or fails, the relic remains available.
 4. The client receipt offers **"Print Invoice & Provenance"** and direct **"Track Order"** actions.
 
 ### D. Order Tracking & Privacy (`/track`)
@@ -95,7 +103,7 @@ graph TD
    * **Orders:** Full dispatch workflow (`confirmed` → `dispatched` → `delivered` → `cancelled`) with CSV export for BlueDart courier manifests.
    * **Patrons CRM:** Aggregates unique clients, lifetime spend (LTV in ₹), past acquisitions, and direct 1-click WhatsApp/Email concierge links.
    * **Live Auctions:** Inspects individual bid ledgers and executes auction awards.
-   * **Relics Catalog:** Introduces new 1-of-1 relics with direct image file upload and live previews.
+   * **Relics Catalog:** Introduces new 1-of-1 relics with client-side canvas compression (1600px, 85% JPEG) and direct uploads to Supabase Storage CDN (`product-images`).
    * **Customization:** Edits hero headlines, running marquee ticker, drop status, and active promo discounts live.
 
 ---
