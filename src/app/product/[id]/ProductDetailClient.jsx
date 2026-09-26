@@ -54,21 +54,53 @@ export default function ProductDetailClient({ product }) {
   const [bidSuccessMsg, setBidSuccessMsg] = useState("");
   const [showHistory, setShowHistory] = useState(true);
 
-  // Live countdown timer (simulating 23h 48m)
-  const [timeLeft, setTimeLeft] = useState({ hours: 23, minutes: 48, seconds: 35 });
+  // Live countdown timer wired to real auction_end_time from database
+  const auctionEndTime = product.auctionEndTime || product.auction_end_time;
+
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (!auctionEndTime) {
+      return { hours: 23, minutes: 48, seconds: 35, isExpired: false, totalSeconds: 85715 };
+    }
+    const diff = new Date(auctionEndTime).getTime() - Date.now();
+    if (diff <= 0) return { hours: 0, minutes: 0, seconds: 0, isExpired: true, totalSeconds: 0 };
+    return {
+      hours: Math.floor(diff / (1000 * 60 * 60)),
+      minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+      seconds: Math.floor((diff % (1000 * 60)) / 1000),
+      isExpired: false,
+      totalSeconds: Math.floor(diff / 1000)
+    };
+  });
 
   useEffect(() => {
     if (!bidding) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
-        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return prev;
-      });
-    }, 1000);
+    const updateCountdown = () => {
+      if (!auctionEndTime) {
+        setTimeLeft((prev) => {
+          if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+          if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
+          if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
+          return { hours: 0, minutes: 0, seconds: 0, isExpired: true, totalSeconds: 0 };
+        });
+        return;
+      }
+      const diff = new Date(auctionEndTime).getTime() - Date.now();
+      if (diff <= 0) {
+        setTimeLeft({ hours: 0, minutes: 0, seconds: 0, isExpired: true, totalSeconds: 0 });
+      } else {
+        setTimeLeft({
+          hours: Math.floor(diff / (1000 * 60 * 60)),
+          minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+          seconds: Math.floor((diff % (1000 * 60)) / 1000),
+          isExpired: false,
+          totalSeconds: Math.floor(diff / 1000)
+        });
+      }
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [bidding]);
+  }, [bidding, auctionEndTime]);
 
   // Keep bidAmount in sync with latest current bid if outbid
   useEffect(() => {
@@ -108,6 +140,11 @@ export default function ProductDetailClient({ product }) {
     e.preventDefault();
     setBidError("");
     setBidSuccessMsg("");
+
+    if (timeLeft.isExpired) {
+      setBidError("This atelier auction has concluded and is officially closed. Further bids cannot be accepted.");
+      return;
+    }
 
     const numericBid = Number(bidAmount);
 
@@ -393,18 +430,20 @@ export default function ProductDetailClient({ product }) {
                       display: "flex",
                       alignItems: "center",
                       gap: "6px",
-                      backgroundColor: "var(--color-ivory)",
+                      backgroundColor: timeLeft.isExpired ? "rgba(229, 56, 38, 0.08)" : "var(--color-ivory)",
                       padding: "5px 12px",
-                      border: "1px solid var(--color-border)",
+                      border: `1px solid ${timeLeft.isExpired ? "var(--color-siren)" : "var(--color-border)"}`,
                       fontSize: "0.75rem",
                       fontFamily: "var(--font-sans)",
                       fontWeight: 600
                     }}
                   >
                     <Clock size={14} color="var(--color-siren)" />
-                    <span>CLOSES IN:</span>
+                    <span>{timeLeft.isExpired ? "STATUS:" : "CLOSES IN:"}</span>
                     <span style={{ color: "var(--color-siren)", fontVariantNumeric: "tabular-nums" }}>
-                      {String(timeLeft.hours).padStart(2, "0")}h : {String(timeLeft.minutes).padStart(2, "0")}m : {String(timeLeft.seconds).padStart(2, "0")}s
+                      {timeLeft.isExpired
+                        ? "AUCTION CONCLUDED"
+                        : `${String(timeLeft.hours).padStart(2, "0")}h : ${String(timeLeft.minutes).padStart(2, "0")}m : ${String(timeLeft.seconds).padStart(2, "0")}s`}
                     </span>
                   </div>
                 </div>
@@ -653,17 +692,23 @@ export default function ProductDetailClient({ product }) {
                   <div style={{ display: "flex", gap: "10px" }}>
                     <button
                       type="submit"
+                      disabled={timeLeft.isExpired}
                       className="azar-btn-black"
                       style={{
                         flex: 1,
                         height: "54px",
                         fontSize: "0.8rem",
                         letterSpacing: "0.16em",
-                        backgroundColor: "var(--color-siren)",
-                        color: "#FFF"
+                        backgroundColor: timeLeft.isExpired ? "#777777" : "var(--color-siren)",
+                        color: "#FFF",
+                        cursor: timeLeft.isExpired ? "not-allowed" : "pointer",
+                        opacity: timeLeft.isExpired ? 0.75 : 1
                       }}
                     >
-                      <Gavel size={16} /> SUBMIT BINDING BID (₹{Number(bidAmount).toLocaleString("en-IN")})
+                      <Gavel size={16} />{" "}
+                      {timeLeft.isExpired
+                        ? "AUCTION CONCLUDED · BIDS CLOSED"
+                        : `SUBMIT BINDING BID (₹${Number(bidAmount).toLocaleString("en-IN")})`}
                     </button>
 
                     <button

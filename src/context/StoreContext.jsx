@@ -99,7 +99,8 @@ export function StoreProvider({ children }) {
             imagePrimary: p.image_primary,
             imageSecondary: p.image_secondary,
             description: p.description,
-            details: Array.isArray(p.details) ? p.details : []
+            details: Array.isArray(p.details) ? p.details : [],
+            auctionEndTime: p.auction_end_time || null
           }));
           setProducts(mapped);
           localStorage.setItem("indie_summer_products", JSON.stringify(mapped));
@@ -507,7 +508,9 @@ export function StoreProvider({ children }) {
       customer_address: orderPayload.customerAddress || "",
       customer_city: orderPayload.customerCity || "",
       customer_pincode: orderPayload.customerPincode || "",
-      payment_method: orderPayload.paymentMethod || "upi",
+      payment_method: orderPayload.paymentMethod || "RAZORPAY",
+      payment_id: orderPayload.paymentId || null,
+      payment_status: orderPayload.paymentStatus || "PAID",
       total_amount_inr: Number(orderPayload.totalAmountINR || 0),
       items: orderPayload.items || [],
       status: "confirmed",
@@ -530,6 +533,8 @@ export function StoreProvider({ children }) {
           customer_city: fullOrder.customer_city,
           customer_pincode: fullOrder.customer_pincode,
           payment_method: fullOrder.payment_method,
+          payment_id: fullOrder.payment_id,
+          payment_status: fullOrder.payment_status,
           total_amount_inr: fullOrder.total_amount_inr,
           items: fullOrder.items,
           status: fullOrder.status

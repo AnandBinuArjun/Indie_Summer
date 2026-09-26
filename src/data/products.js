@@ -16,6 +16,7 @@ export const PRODUCTS = [
     currentBidINR: 32500,
     minBidIncrementINR: 500,
     bidsCount: 8,
+    auctionEndTime: new Date(Date.now() + 28 * 3600 * 1000).toISOString(),
     bidsHistory: [
       { id: "b1", bidder: "Collector in Malabar Hill, Mumbai", amount: 32500, time: "14m ago" },
       { id: "b2", bidder: "Patron in Lutyens Delhi", amount: 32000, time: "1h ago" },
@@ -86,6 +87,7 @@ export const PRODUCTS = [
     currentBidINR: 35500,
     minBidIncrementINR: 500,
     bidsCount: 6,
+    auctionEndTime: new Date(Date.now() + 19 * 3600 * 1000).toISOString(),
     bidsHistory: [
       { id: "b1", bidder: "Patron in Jubilee Hills, Hyderabad", amount: 35500, time: "22m ago" },
       { id: "b2", bidder: "Collector in Koregaon Park, Pune", amount: 35000, time: "2h ago" },

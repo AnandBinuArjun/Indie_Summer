@@ -348,21 +348,112 @@ export default function AdminDashboard() {
     setTimeout(() => setSettingsSaved(false), 2500);
   };
 
-  // Image File Upload Helper
-  const handleImageFileUpload = (e, isEditing) => {
+  // Client-side canvas image compression to prevent bloated payloads
+  const compressImageFile = (file, maxWidth = 1600, quality = 0.85) => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxWidth) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxWidth) / height);
+            height = maxWidth;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Canvas compression failed"));
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadNotice, setImageUploadNotice] = useState("");
+
+  // Supabase Storage & Compression Image Uploader
+  const handleImageFileUpload = async (e, isEditing) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const dataUrl = uploadEvent.target.result;
-      if (isEditing) {
-        setEditingProduct((prev) => ({ ...prev, imagePrimary: dataUrl }));
-      } else {
-        setNewProductForm((prev) => ({ ...prev, imagePrimary: dataUrl }));
+    setImageUploading(true);
+    setImageUploadNotice("Optimizing and uploading image...");
+
+    try {
+      const compressedBlob = await compressImageFile(file, 1600, 0.85);
+      let finalUrl = null;
+
+      // Attempt upload to Supabase Storage CDN
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const fileName = `relic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from("product-images")
+            .upload(fileName, compressedBlob, {
+              contentType: "image/jpeg",
+              cacheControl: "31536000",
+              upsert: true
+            });
+
+          if (!uploadErr && uploadData) {
+            const { data: publicUrlData } = supabase.storage
+              .from("product-images")
+              .getPublicUrl(fileName);
+            finalUrl = publicUrlData.publicUrl;
+            setImageUploadNotice("✓ Uploaded to Supabase Storage CDN");
+          } else {
+            console.warn("Supabase storage bucket notice:", uploadErr?.message);
+          }
+        } catch (storageErr) {
+          console.warn("Storage upload exception:", storageErr);
+        }
       }
-    };
-    reader.readAsDataURL(file);
+
+      // Safe fallback if bucket not yet created: use lightweight compressed base64 (~150KB instead of 8MB)
+      if (!finalUrl) {
+        finalUrl = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = (ev) => res(ev.target.result);
+          r.readAsDataURL(compressedBlob);
+        });
+        setImageUploadNotice("✓ Image optimized (compressed to ~150KB)");
+      }
+
+      if (isEditing) {
+        setEditingProduct((prev) => ({ ...prev, imagePrimary: finalUrl }));
+      } else {
+        setNewProductForm((prev) => ({ ...prev, imagePrimary: finalUrl }));
+      }
+
+      setTimeout(() => setImageUploadNotice(""), 4500);
+    } catch (err) {
+      console.error("Image upload error:", err);
+      setImageUploadNotice("Failed to process image: " + err.message);
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   // Fetch individual bid history for a product
@@ -2443,8 +2534,13 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
                           fontWeight: 700
                         }}
                       >
-                        <Upload size={13} /> UPLOAD NEW IMAGE FILE
+                        <Upload size={13} /> {imageUploading ? "OPTIMIZING..." : "UPLOAD NEW IMAGE FILE"}
                       </label>
+                      {imageUploadNotice && (
+                        <div style={{ fontSize: "0.72rem", color: "var(--color-siren)", marginTop: "4px", fontWeight: 600 }}>
+                          {imageUploadNotice}
+                        </div>
+                      )}
                       <input
                         type="text"
                         placeholder="Or enter image URL..."
@@ -2671,8 +2767,13 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
                           fontWeight: 700
                         }}
                       >
-                        <Upload size={13} /> UPLOAD NEW IMAGE FILE
+                        <Upload size={13} /> {imageUploading ? "OPTIMIZING..." : "UPLOAD NEW IMAGE FILE"}
                       </label>
+                      {imageUploadNotice && (
+                        <div style={{ fontSize: "0.72rem", color: "var(--color-siren)", marginTop: "4px", fontWeight: 600 }}>
+                          {imageUploadNotice}
+                        </div>
+                      )}
                       <input
                         type="text"
                         placeholder="Or enter image URL / path..."

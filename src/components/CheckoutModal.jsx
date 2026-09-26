@@ -1,9 +1,45 @@
 "use client";
 
-import React, { useState } from "react";
-import { X, CheckCircle2, ShieldCheck, Lock, CreditCard, Sparkles, Smartphone, Building2, Printer, FileText } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import {
+  X,
+  CheckCircle2,
+  ShieldCheck,
+  Lock,
+  CreditCard,
+  Sparkles,
+  Smartphone,
+  Building2,
+  Printer,
+  FileText,
+  AlertCircle
+} from "lucide-react";
 import confetti from "canvas-confetti";
 import { useStore } from "../context/StoreContext";
+
+// Dynamically load official Razorpay SDK script
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      console.warn("Failed to load Razorpay checkout script from CDN.");
+      resolve(false);
+    };
+    document.body.appendChild(script);
+  });
+}
 
 export default function CheckoutModal() {
   const {
@@ -17,13 +53,14 @@ export default function CheckoutModal() {
     createOrder
   } = useStore();
 
-  // All hooks MUST be declared before any early return (Rules of Hooks)
-  const [paymentMethod, setPaymentMethod] = useState("upi"); // 'upi', 'card', 'netbanking'
-  const [upiId, setUpiId] = useState("ananya@okhdfcbank");
-  const [selectedBank, setSelectedBank] = useState("HDFC Bank");
+  const [paymentMethod, setPaymentMethod] = useState("gateway"); // 'gateway' (UPI/Card/Netbanking via Razorpay)
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderRef, setOrderRef] = useState("");
+  const [paymentId, setPaymentId] = useState("");
+  const [gatewayNotice, setGatewayNotice] = useState("");
+
   const [formData, setFormData] = useState({
     firstName: "Ananya",
     lastName: "Singhania",
@@ -32,14 +69,11 @@ export default function CheckoutModal() {
     address: "Bungalow 4, Altamount Road",
     city: "Mumbai",
     state: "Maharashtra",
-    postalCode: "400026",
-    cardNumber: "•••• •••• •••• 9924",
-    expiry: "09/29",
-    cvv: "•••"
+    postalCode: "400026"
   });
 
   // Hydrate remembered contact info if available
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("indie_summer_saved_contact");
       if (saved) {
@@ -52,77 +86,212 @@ export default function CheckoutModal() {
   }, []);
 
   const total = getCartTotal();
-  const onClose = () => setCheckoutOpen(false);
+  const netSilhouetteValue = Math.round(total / 1.05);
+  const totalGst = total - netSilhouetteValue;
+
+  // Real Indian GST tax breakdown (Intra-state Goa: CGST+SGST, Inter-state: IGST)
+  const isGoaDestination = formData.state?.trim().toLowerCase().includes("goa");
+  const cgst = isGoaDestination ? Math.round(totalGst / 2) : 0;
+  const sgst = isGoaDestination ? totalGst - cgst : 0;
+  const igst = !isGoaDestination ? totalGst : 0;
+
+  const onClose = () => {
+    if (!isProcessing) {
+      setCheckoutOpen(false);
+      setPaymentError("");
+    }
+  };
 
   if (!checkoutOpen) return null;
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
+    setPaymentError("");
     setIsProcessing(true);
 
     const generatedOrder = "IS-IND-" + Math.floor(100000 + Math.random() * 900000);
+    const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
 
     try {
-      if (createOrder) {
-        await createOrder({
+      // Step 1: Initialize Payment Order on Server
+      const orderRes = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: total,
+          currency: "INR",
           orderRef: generatedOrder,
-          customerName: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
-          customerEmail: formData.email.trim(),
-          customerPhone: formData.phone.trim(),
-          customerAddress: `${formData.address.trim()}`,
-          customerCity: formData.city.trim(),
-          customerPincode: formData.postalCode.trim(),
-          paymentMethod,
-          totalAmountINR: total,
-          items: items.map((it) => ({
-            id: it.id,
-            name: it.name,
-            code: it.code,
-            priceINR: it.priceINR,
-            selectedSize: it.selectedSize || "One Size",
-            imagePrimary: it.imagePrimary,
-            quantity: it.quantity || 1
-          }))
+          customerName: fullName,
+          customerEmail: formData.email.trim()
+        })
+      });
+
+      if (!orderRes.ok) {
+        const errJson = await orderRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to initialize payment gateway order.");
+      }
+
+      const orderData = await orderRes.json();
+      const isRazorpayLoaded = await loadRazorpayScript();
+
+      // Step 2A: Live / Test Razorpay Gateway execution
+      if (isRazorpayLoaded && !orderData.isTestMode && window.Razorpay) {
+        const options = {
+          key: orderData.keyId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: "INDIE SUMMER ATELIER",
+          description: `Acquisition of ${items.length} Archival 1-of-1 Relic(s)`,
+          image: "/images/logo.png",
+          order_id: orderData.orderId,
+          handler: async function (response) {
+            try {
+              // Step 3: Cryptographically verify payment on server
+              const verifyRes = await fetch("/api/payment/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature
+                })
+              });
+
+              const verifyData = await verifyRes.json();
+              if (!verifyRes.ok || !verifyData.verified) {
+                throw new Error(verifyData.error || "Payment signature verification failed.");
+              }
+
+              // Step 4: ONLY persist order & mark items as sold AFTER verified payment
+              await finalizeOrder(generatedOrder, response.razorpay_payment_id, "PAID (RAZORPAY)");
+            } catch (err) {
+              console.error("Payment verification failure:", err);
+              setPaymentError(err.message || "Payment verification failed. Your card was not charged.");
+              setIsProcessing(false);
+            }
+          },
+          prefill: {
+            name: fullName,
+            email: formData.email.trim(),
+            contact: formData.phone.trim()
+          },
+          notes: {
+            order_ref: generatedOrder,
+            shipping_address: `${formData.address}, ${formData.city}, ${formData.state} - ${formData.postalCode}`
+          },
+          theme: {
+            color: "#111111"
+          },
+          modal: {
+            ondismiss: function () {
+              setIsProcessing(false);
+              setGatewayNotice("Payment window closed. Your piece remains safely reserved in your bag.");
+            }
+          }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on("payment.failed", function (resp) {
+          setIsProcessing(false);
+          setPaymentError(resp.error?.description || "Payment failed at issuing bank. Please retry.");
         });
+        rzp.open();
+        return;
       }
 
-      try {
-        localStorage.setItem(
-          "indie_summer_saved_contact",
-          JSON.stringify({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            phone: formData.phone,
-            address: formData.address,
-            city: formData.city,
-            state: formData.state,
-            postalCode: formData.postalCode
-          })
-        );
-      } catch (err) {
-        // ignore
+      // Step 2B: Atelier Sandbox Simulator mode (when merchant API keys are pending setup)
+      // This explicitly warns and verifies before creating any order record
+      const confirmSandbox = window.confirm(
+        `[ATELIER GATEWAY SIMULATOR]\n\nSimulate authorized Razorpay payment of ${formatPrice(total, "INR")} for order ${generatedOrder}?\n\n(Configure RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET in .env.local for live production gateway.)`
+      );
+
+      if (!confirmSandbox) {
+        setIsProcessing(false);
+        setGatewayNotice("Checkout authorization paused. Your cart has not been charged.");
+        return;
       }
 
-      setOrderRef(generatedOrder);
-      setOrderSuccess(true);
+      // Verify sandbox payment via server route
+      const verifyRes = await fetch("/api/payment/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          razorpay_order_id: orderData.orderId,
+          razorpay_payment_id: `pay_sandbox_${Date.now()}`
+        })
+      });
 
-      try {
-        confetti({
-          particleCount: 130,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ["#E53826", "#FBFBF7", "#C29547", "#111111"]
-        });
-      } catch (err) {
-        console.log("Confetti trigger", err);
+      const verifyData = await verifyRes.json();
+      if (!verifyData.verified) {
+        throw new Error("Sandbox payment authorization declined.");
       }
+
+      await finalizeOrder(generatedOrder, verifyData.paymentId, "PAID (SANDBOX)");
     } catch (err) {
-      console.error("Order error", err);
-      setOrderRef(generatedOrder);
-      setOrderSuccess(true);
-    } finally {
+      console.error("Order processing error:", err);
+      setPaymentError(err.message || "An unexpected error occurred during payment. Please retry.");
       setIsProcessing(false);
+    }
+  };
+
+  const finalizeOrder = async (generatedOrder, confirmedPaymentId, paymentStatus) => {
+    if (createOrder) {
+      await createOrder({
+        orderRef: generatedOrder,
+        customerName: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+        customerEmail: formData.email.trim(),
+        customerPhone: formData.phone.trim(),
+        customerAddress: `${formData.address.trim()}`,
+        customerCity: formData.city.trim(),
+        customerPincode: formData.postalCode.trim(),
+        paymentMethod: "RAZORPAY GATEWAY",
+        paymentId: confirmedPaymentId,
+        paymentStatus: paymentStatus,
+        totalAmountINR: total,
+        items: items.map((it) => ({
+          id: it.id,
+          name: it.name,
+          code: it.code,
+          priceINR: it.priceINR,
+          selectedSize: it.selectedSize || "One Size",
+          imagePrimary: it.imagePrimary,
+          quantity: it.quantity || 1
+        }))
+      });
+    }
+
+    try {
+      localStorage.setItem(
+        "indie_summer_saved_contact",
+        JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          postalCode: formData.postalCode
+        })
+      );
+    } catch (err) {
+      // ignore
+    }
+
+    setOrderRef(generatedOrder);
+    setPaymentId(confirmedPaymentId);
+    setOrderSuccess(true);
+    setIsProcessing(false);
+
+    try {
+      confetti({
+        particleCount: 130,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ["#E53826", "#FBFBF7", "#C29547", "#111111"]
+      });
+    } catch (err) {
+      console.log("Confetti trigger note:", err);
     }
   };
 
@@ -146,6 +315,7 @@ export default function CheckoutModal() {
         <button
           type="button"
           onClick={onClose}
+          disabled={isProcessing}
           style={{
             position: "absolute",
             top: "18px",
@@ -153,7 +323,7 @@ export default function CheckoutModal() {
             zIndex: 20,
             padding: "6px",
             backgroundColor: "rgba(251, 251, 247, 0.9)",
-            cursor: "pointer"
+            cursor: isProcessing ? "not-allowed" : "pointer"
           }}
           aria-label="Close"
         >
@@ -178,6 +348,40 @@ export default function CheckoutModal() {
                 Complimentary BlueDart Air express dispatch from our Goa coastal studio.
               </p>
             </div>
+
+            {paymentError && (
+              <div
+                style={{
+                  backgroundColor: "rgba(229, 56, 38, 0.08)",
+                  border: "1px solid var(--color-siren)",
+                  padding: "12px 16px",
+                  marginBottom: "1.5rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "0.82rem",
+                  color: "var(--color-siren)"
+                }}
+              >
+                <AlertCircle size={18} />
+                <span>{paymentError}</span>
+              </div>
+            )}
+
+            {gatewayNotice && !paymentError && (
+              <div
+                style={{
+                  backgroundColor: "rgba(194, 149, 71, 0.12)",
+                  border: "1px solid #C29547",
+                  padding: "10px 14px",
+                  marginBottom: "1.5rem",
+                  fontSize: "0.8rem",
+                  color: "var(--color-ink)"
+                }}
+              >
+                {gatewayNotice}
+              </div>
+            )}
 
             <form onSubmit={handlePlaceOrder}>
               <div className="checkout-grid" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "2rem" }}>
@@ -295,107 +499,34 @@ export default function CheckoutModal() {
 
                   {/* Payment Selection */}
                   <h3 className="maru-eyebrow" style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: "0.35rem", marginBottom: "0.8rem" }}>
-                    2. PAYMENT METHOD (INDIA & INTERNATIONAL)
+                    2. PAYMENT CHANNELS
                   </h3>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "1rem" }}>
-                    {[
-                      { id: "upi", label: "UPI / QR", icon: Smartphone },
-                      { id: "card", label: "Cards / EMI", icon: CreditCard },
-                      { id: "netbanking", label: "NetBanking", icon: Building2 }
-                    ].map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id)}
-                        style={{
-                          padding: "8px 4px",
-                          border: paymentMethod === m.id ? "1.5px solid var(--color-ink)" : "1px solid var(--color-border)",
-                          backgroundColor: paymentMethod === m.id ? "var(--color-ink)" : "#FFF",
-                          color: paymentMethod === m.id ? "var(--color-ivory)" : "var(--color-ink)",
-                          fontSize: "0.68rem",
-                          letterSpacing: "0.08em",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        <m.icon size={13} /> {m.label}
-                      </button>
-                    ))}
+                  <div
+                    style={{
+                      border: "1px solid var(--color-ink)",
+                      backgroundColor: "#FFF",
+                      padding: "1rem",
+                      marginBottom: "1rem"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 700, fontFamily: "var(--font-sans)" }}>
+                        RAZORPAY SECURE PAYMENT SUITE
+                      </span>
+                      <span style={{ fontSize: "0.65rem", backgroundColor: "var(--color-ink)", color: "var(--color-ivory)", padding: "2px 6px" }}>
+                        INSTANT VERIFICATION
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.78rem", color: "rgba(14, 13, 13, 0.7)", lineHeight: 1.45, marginBottom: "0.8rem" }}>
+                      Supports all major Indian and international payment options: UPI (Google Pay, PhonePe, Paytm, CRED), Visa, Mastercard, American Express, Netbanking across 50+ banks, and EMI.
+                    </p>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "0.7rem", color: "rgba(14, 13, 13, 0.65)" }}>
+                      <span style={{ padding: "3px 8px", backgroundColor: "var(--color-cream)", border: "1px solid var(--color-border)" }}>✓ UPI Auto-Routing</span>
+                      <span style={{ padding: "3px 8px", backgroundColor: "var(--color-cream)", border: "1px solid var(--color-border)" }}>✓ 3D Secure 2.0</span>
+                      <span style={{ padding: "3px 8px", backgroundColor: "var(--color-cream)", border: "1px solid var(--color-border)" }}>✓ Zero-Liability Protection</span>
+                    </div>
                   </div>
-
-                  {paymentMethod === "upi" && (
-                    <div style={{ backgroundColor: "#FFF", padding: "1rem", border: "1px solid var(--color-border)", marginBottom: "1rem" }}>
-                      <label style={{ fontSize: "0.62rem", display: "block", marginBottom: "4px", textTransform: "uppercase" }}>
-                        ENTER UPI ID (GPay / PhonePe / Paytm / BHIM)
-                      </label>
-                      <input
-                        type="text"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value)}
-                        style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", fontSize: "0.82rem", outline: "none" }}
-                      />
-                      <p style={{ fontSize: "0.65rem", color: "rgba(14, 13, 13, 0.55)", marginTop: "4px" }}>
-                        A payment request will be sent directly to your UPI mobile application.
-                      </p>
-                    </div>
-                  )}
-
-                  {paymentMethod === "card" && (
-                    <div style={{ backgroundColor: "#FFF", padding: "1rem", border: "1px solid var(--color-border)", marginBottom: "1rem" }}>
-                      <div style={{ marginBottom: "8px" }}>
-                        <label style={{ fontSize: "0.62rem", display: "block", marginBottom: "4px" }}>CARD NUMBER (RuPay, Visa, Mastercard, Amex)</label>
-                        <input
-                          type="text"
-                          value={formData.cardNumber}
-                          onChange={(e) => setFormData({ ...formData, cardNumber: e.target.value })}
-                          style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", fontSize: "0.82rem" }}
-                        />
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                        <div>
-                          <label style={{ fontSize: "0.62rem", display: "block", marginBottom: "4px" }}>VALID THRU</label>
-                          <input
-                            type="text"
-                            value={formData.expiry}
-                            onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
-                            style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", fontSize: "0.82rem" }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "0.62rem", display: "block", marginBottom: "4px" }}>CVV</label>
-                          <input
-                            type="password"
-                            value={formData.cvv}
-                            onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
-                            style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", fontSize: "0.82rem" }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === "netbanking" && (
-                    <div style={{ backgroundColor: "#FFF", padding: "1rem", border: "1px solid var(--color-border)", marginBottom: "1rem" }}>
-                      <label style={{ fontSize: "0.62rem", display: "block", marginBottom: "4px" }}>SELECT INDIAN BANK</label>
-                      <select
-                        value={selectedBank}
-                        onChange={(e) => setSelectedBank(e.target.value)}
-                        style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", fontSize: "0.82rem" }}
-                      >
-                        <option>HDFC Bank</option>
-                        <option>ICICI Bank</option>
-                        <option>State Bank of India (SBI)</option>
-                        <option>Axis Bank</option>
-                        <option>Kotak Mahindra Bank</option>
-                        <option>Yes Bank</option>
-                      </select>
-                    </div>
-                  )}
                 </div>
 
                 {/* Right: Summary */}
@@ -421,14 +552,29 @@ export default function CheckoutModal() {
                   <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.8rem", marginTop: "auto" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
                       <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Net Silhouette Value</span>
-                      <span style={{ fontWeight: 600 }}>{formatPrice(Math.round(total / 1.05), currency)}</span>
+                      <span style={{ fontWeight: 600 }}>{formatPrice(netSilhouetteValue, currency)}</span>
                     </div>
+
+                    {isGoaDestination ? (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                          <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom CGST (2.5% Intra-State)</span>
+                          <span style={{ fontWeight: 600 }}>{formatPrice(cgst, currency)}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                          <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom SGST (2.5% Intra-State)</span>
+                          <span style={{ fontWeight: 600 }}>{formatPrice(sgst, currency)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                        <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom IGST (5.0% Inter-State)</span>
+                        <span style={{ fontWeight: 600 }}>{formatPrice(igst, currency)}</span>
+                      </div>
+                    )}
+
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom GST (5% Included)</span>
-                      <span style={{ fontWeight: 600 }}>{formatPrice(total - Math.round(total / 1.05), currency)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>BlueDart Express Air</span>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>BlueDart Express Air (2-3 Days)</span>
                       <span style={{ fontWeight: 600, color: "#166534" }}>COMPLIMENTARY</span>
                     </div>
 
@@ -446,11 +592,11 @@ export default function CheckoutModal() {
                     className="azar-btn-black"
                     style={{ width: "100%", marginTop: "1.2rem", justifyContent: "center" }}
                   >
-                    {isProcessing ? "SECURING 1-OF-1 PIECE..." : "AUTHORIZE & COMPLETE ORDER"}
+                    {isProcessing ? "INITIALIZING SECURE GATEWAY..." : "AUTHORIZE & COMPLETE ORDER"}
                   </button>
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "0.8rem", fontSize: "0.62rem", color: "rgba(14, 13, 13, 0.55)", letterSpacing: "0.1em" }}>
-                    <ShieldCheck size={13} color="var(--color-ink)" /> <span>256-BIT SSL ENCRYPTED ATELIER CHECKOUT</span>
+                    <ShieldCheck size={13} color="var(--color-ink)" /> <span>SECURE ATELIER CHECKOUT · 256-BIT TLS ENCRYPTED</span>
                   </div>
                 </div>
               </div>
@@ -468,7 +614,7 @@ export default function CheckoutModal() {
             </div>
 
             <p className="maru-eyebrow" style={{ color: "var(--color-siren)", marginBottom: "0.4rem" }}>
-              ACQUISITION CONFIRMED · PROVENANCE RESERVED
+              PAYMENT VERIFIED · ACQUISITION CONFIRMED
             </p>
 
             <h2 className="font-display" style={{ fontSize: "2.8rem", marginBottom: "0.5rem" }}>
@@ -476,7 +622,7 @@ export default function CheckoutModal() {
             </h2>
 
             <p className="font-serif italic" style={{ fontSize: "1.1rem", color: "rgba(14, 13, 13, 0.7)", maxWidth: "580px", margin: "0 auto 1.2rem" }}>
-              Thank you, {formData.firstName}. Your one-of-one garment has entered The Archive under your provenance.
+              Thank you, {formData.firstName}. Your payment has been authorized and your one-of-one garment has entered The Archive under your provenance.
             </p>
 
             <div style={{ display: "inline-block", backgroundColor: "var(--color-cream)", padding: "1.2rem 2.2rem", border: "1px dashed var(--color-ink)", marginBottom: "1.8rem" }}>
@@ -484,8 +630,13 @@ export default function CheckoutModal() {
               <div style={{ fontFamily: "var(--font-sans)", fontSize: "1.35rem", fontWeight: 700, letterSpacing: "0.14em", marginTop: "2px" }}>
                 {orderRef}
               </div>
+              {paymentId && (
+                <div style={{ fontSize: "0.72rem", color: "rgba(14, 13, 13, 0.65)", marginTop: "4px" }}>
+                  Payment Reference: <code>{paymentId}</code>
+                </div>
+              )}
               <p style={{ fontSize: "0.75rem", color: "rgba(14, 13, 13, 0.6)", marginTop: "4px" }}>
-                Dispatched via BlueDart Air to {formData.city}, {formData.state} · SMS tracking sent to {formData.phone}
+                Dispatched via BlueDart Air to {formData.city}, {formData.state} · Tracking updates sent to {formData.phone}
               </p>
             </div>
 
@@ -541,20 +692,12 @@ export default function CheckoutModal() {
                   height: "44px"
                 }}
               >
-                TRACK ORDER ↗
+                <FileText size={14} /> TRACK DISPATCH STATUS
               </a>
             </div>
           </div>
         )}
       </div>
-
-      <style>{`
-        @media (max-width: 768px) {
-          .checkout-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

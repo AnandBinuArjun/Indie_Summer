@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { X, Trash2, ArrowRight, ShieldCheck, Tag } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 
@@ -148,11 +149,13 @@ export default function CartDrawer() {
                   }}
                 >
                   {/* Thumbnail */}
-                  <div style={{ aspectRatio: "3 / 4", width: "80px", backgroundColor: "var(--color-cream)", overflow: "hidden" }}>
-                    <img
-                      src={item.imagePrimary}
+                  <div style={{ aspectRatio: "3 / 4", width: "80px", backgroundColor: "var(--color-cream)", overflow: "hidden", position: "relative" }}>
+                    <Image
+                      src={item.imagePrimary || "/images/piece-crimson-saree.jpg"}
                       alt={item.name}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      fill
+                      sizes="80px"
+                      style={{ objectFit: "cover" }}
                     />
                   </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Heart, Check } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 
@@ -19,6 +20,8 @@ export default function ProductCard({ product }) {
   } = useStore();
 
   const bidding = getBiddingInfo(product);
+  const auctionEndTime = product.auctionEndTime || product.auction_end_time;
+  const isAuctionExpired = bidding && auctionEndTime && new Date(auctionEndTime).getTime() <= Date.now();
   const isWishlisted = wishlist.some((w) => w.id === product.id);
 
   const getProductPrice = () => getProductDisplayPrice(product);
@@ -38,19 +41,25 @@ export default function ProductCard({ product }) {
     <div style={{ display: "flex", flexDirection: "column" }} className="azar-product-card">
       {/* 3:4 Aspect Image Box */}
       <div className="card-aspect">
-        <Link href={`/product/${product.id}`} style={{ display: "block", width: "100%", height: "100%" }}>
-          <img
-            src={product.imagePrimary}
+        <Link href={`/product/${product.id}`} style={{ display: "block", width: "100%", height: "100%", position: "relative" }}>
+          <Image
+            src={product.imagePrimary || "/images/piece-crimson-saree.jpg"}
             alt={product.name}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             className="img-primary"
-            loading="lazy"
+            style={{ objectFit: "cover" }}
           />
-          <img
-            src={product.imageSecondary}
-            alt={`${product.name} alternate view`}
-            className="img-secondary"
-            loading="lazy"
-          />
+          {product.imageSecondary && (
+            <Image
+              src={product.imageSecondary}
+              alt={`${product.name} alternate view`}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              className="img-secondary"
+              style={{ objectFit: "cover" }}
+            />
+          )}
         </Link>
 
         {/* Status Badge */}
@@ -72,7 +81,11 @@ export default function ProductCard({ product }) {
             pointerEvents: "none"
           }}
         >
-          {bidding ? (
+          {isAuctionExpired ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "rgba(255,255,255,0.7)" }}>
+              AUCTION CONCLUDED
+            </span>
+          ) : bidding ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#FFDF78" }}>
               <span
                 style={{
