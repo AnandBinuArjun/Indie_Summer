@@ -6,90 +6,187 @@
 
 ---
 
-## Overview
+## 1. Executive Summary
 
-**INDIE SUMMER** is a high-end luxury e-commerce platform built on **Next.js 16 (App Router)** with **React Server Components (RSC)**.
+**INDIE SUMMER** is an archival luxury e-commerce platform built on **Next.js 16 (App Router)** and **React 19**, powered by a **Supabase PostgreSQL** backend with strict **Row-Level Security (RLS)**.
 
 Inspired by premier minimalist fashion labels (such as [azarthelabel.com](https://azarthelabel.com/)), the experience emphasizes slow intentional craftsmanship, authentic Indian textile provenance (Varanasi Banarasi silk, Tamil Nadu brocades, Rajasthan handloom, and Bagru natural indigo), and sustainable zero-waste silhouettes.
 
 ---
 
-## Key Features
+## 2. Technical Stack
 
-- **Full Server-Side Rendering (SSR)**: Complete pre-rendering and dynamic SEO metadata (`generateStaticParams`, `generateMetadata`) across all routes:
-  - `/` — Editorial Hero & Inaugural Drop (Vol. 001)
-  - `/shop` — Atelier Collection with live category and auction filtering
-  - `/product/[id]` — 1-of-1 Relic Details, textile specs, and 6-digit Indian PIN code air express delivery check
-  - `/about` — The Atelier Philosophy & Zero-Waste Manifesto
-  - `/lookbook` — Museum archive of past claimed pieces
-  - `/journal` — 35mm coastal dispatches from Varanasi and Goa
-  - `/faq` — Client care, vintage silk care, and courier logistics
-- **Atelier Live Bidding & Auctions (Min ₹500 Increment)**:
-  - Select archival relics feature live auction bidding with real-time countdown timers.
-  - Strict minimum increment enforcement (`minBidIncrementINR: 500`).
-  - Interactive quick increments (`+₹500`, `+₹1,000`, `+₹2,500`, `+₹5,000`) and custom bid validation.
-  - Chronological **Live Archival Bid History Feed** with high-bid badges and patron locations.
-- **Universal Multi-Currency Switcher**:
-  - Native default in Indian Rupees (`INR ₹`).
-  - Dynamic currency conversion for international patrons: `USD ($)`, `EUR (€)`, `GBP (£)`, and `AED`.
-- **Slide-out Cart & Wishlist Drawers**:
-  - Real-time cart calculations, coupon code discount engine (`INDIE10` for 10% off), and free Pan-India air shipping progress bar.
-- **Encrypted Checkout Modal**:
-  - Full Indian payment suite: UPI / QR Code (GPay, PhonePe, Paytm, BHIM), RuPay / Visa / Mastercard / Amex, and NetBanking.
+* **Framework:** Next.js 16.3 (Turbopack, React Server Components & App Router)
+* **Frontend:** React 19, Vanilla CSS Design System (no Tailwind dependencies)
+* **Typography:** Fraunces Serif, Space Grotesk, Anton, Plus Jakarta Sans
+* **Database & Auth:** Supabase (PostgreSQL, Row-Level Security, Auth)
+* **State Management:** React Context (`StoreContext`) with optimistic updates and unified local storage fallback (`src/lib/orderStorage.js`)
+* **Observability:** Centralized error logging (`src/lib/logger.js`) with React 19 error boundaries (`error.jsx`, `global-error.jsx`)
+* **Icons & Effects:** Lucide React, Canvas-Confetti
 
 ---
 
-## Tech Stack
+## 3. System Architecture & Topology
 
-- **Framework**: [Next.js 16 (Turbopack, App Router)](https://nextjs.org/)
-- **Core**: React 19, JavaScript ESNext
-- **Styling**: Vanilla CSS Design Tokens, Glassmorphism, Micro-animations
-- **Typography**: Anton, Fraunces Serif, Space Grotesk, Plus Jakarta Sans
-- **Icons**: Lucide React
-- **Celebration Effects**: Canvas-Confetti
+```mermaid
+graph TD
+    subgraph Client Browser
+        UI[Public Storefront & SSR Pages]
+        AdminUI[Atelier Admin Portal /admin]
+        SC[StoreContext State & Cart]
+        LS[(Local Storage Fallback Cache)]
+    end
+
+    subgraph Next.js 16 Server
+        SSR[Static Site Generation SSG / SSR]
+        API[API Handlers & SEO Endpoints]
+        SEO[Dynamic Sitemap & Robots]
+    end
+
+    subgraph Supabase Cloud
+        Auth[Supabase Auth Staff Session]
+        PG[(PostgreSQL Database)]
+        RLS[Row Level Security Engine]
+    end
+
+    UI --> SC
+    AdminUI --> Auth
+    SC <--> LS
+    SC <-->|Read / Bid / Order| RLS
+    AdminUI <-->|Manage Catalog & Orders| RLS
+    RLS <--> PG
+    SSR --> UI
+```
 
 ---
 
-## Getting Started
+## 4. End-to-End Data Flow
+
+### A. Catalog Hydration
+1. At build time, Next.js statically pre-renders all product routes (`/product/[id]`) using `src/data/products.js`.
+2. When a visitor arrives, `StoreContext` checks the live Supabase `products` table. If configured, live PostgreSQL inventory overrides static data; if offline or unconfigured, it seamlessly falls back to local data.
+3. Every garment is guaranteed **1-of-1**: when purchased, its status transitions to `"sold"` across the storefront.
+
+### B. Live Atelier Auctions & Bidding Portal
+1. Select archival relics feature live auction bidding with countdown deadlines (`auction_end_time`).
+2. Patrons submit offers on `/product/[id]`. The engine enforces a **minimum ₹500 increment** over the leading bid.
+3. Bids are written to Supabase `public.bids` and update `products.current_bid_inr` and `products.bids_count`.
+4. When atelier staff clicks **"Award Piece & Close Auction"** in `/admin`:
+   * The winning bid and bid count are **preserved** (never wiped to 0).
+   * The relic is marked `status: "reserved"`.
+   * A settlement order (`AUC-WIN-XXXX`) is automatically generated in `public.orders` so the atelier can issue invoices and prepare express transit.
+
+### C. Checkout & Order Lifecycle
+1. Customer enters dispatch coordinates and selects UPI, Card, or Netbanking in `CheckoutModal.jsx`.
+2. Calculates exact 5% Handloom GST and applies dynamic promo codes managed from the admin CMS.
+3. Calls `createOrder()`, generating an official reference (`IS-IND-XXXXXX`) written simultaneously to Supabase `public.orders` and locally cached via `src/lib/orderStorage.js`.
+4. The client receipt offers **"Print Invoice & Provenance"** and direct **"Track Order"** actions.
+
+### D. Order Tracking & Privacy (`/track`)
+1. Patrons track parcels via `/track`.
+2. **Privacy Protection:** Requires **both** the exact Order Reference (`IS-IND-XXXXXX`) **and** matching email or phone.
+3. Full physical street addresses are masked to protect customer privacy on public screens.
+4. Renders a live 4-step dispatch progression (*Acquisition Confirmed* → *Provenance Packaging* → *BlueDart Air Dispatch* → *Delivered to Patron*).
+
+### E. Atelier Operations & Admin CMS (`/admin`)
+1. **Authentication Gate:** Locked behind Supabase Auth (`/admin/login`). Unauthenticated requests bounce immediately.
+2. **Live Tabs:**
+   * **Overview & Revenue:** Real-time Gross Revenue, AOV, drop acquisition velocity, fulfillment rate, and recent transactions feed.
+   * **Orders:** Full dispatch workflow (`confirmed` → `dispatched` → `delivered` → `cancelled`) with CSV export for BlueDart courier manifests.
+   * **Patrons CRM:** Aggregates unique clients, lifetime spend (LTV in ₹), past acquisitions, and direct 1-click WhatsApp/Email concierge links.
+   * **Live Auctions:** Inspects individual bid ledgers and executes auction awards.
+   * **Relics Catalog:** Introduces new 1-of-1 relics with direct image file upload and live previews.
+   * **Customization:** Edits hero headlines, running marquee ticker, drop status, and active promo discounts live.
+
+---
+
+## 5. Database Schema & Security (Supabase PostgreSQL)
+
+Execute [supabase_schema.sql](file:///D:/Ddeveloped_things/indie%20summer/supabase_schema.sql) in your [Supabase SQL Editor](https://supabase.com/dashboard/project/gqvmdrtlocvidjtiyycv/sql):
+
+| Table | Purpose | Public Policy | Staff Policy (Authenticated) |
+| :--- | :--- | :--- | :--- |
+| `products` | 1-of-1 relics & auction items | `SELECT USING (true)` | `ALL TO authenticated` (Full CRUD) |
+| `bids` | Archival offers & ledgers | `SELECT`, `INSERT WITH CHECK (amount > 0)` | `ALL TO authenticated` (Full CRUD) |
+| `orders` | Customer acquisitions & PII | `INSERT WITH CHECK (valid ref & name)` | `ALL TO authenticated` (Restricted view/edit) |
+| `site_settings` | Marquee, headlines, promo codes | `SELECT USING (true)` | `ALL TO authenticated` (Full CRUD) |
+| `error_logs` | Observability runtime exceptions | `INSERT WITH CHECK (true)` | `SELECT TO authenticated` (Staff review) |
+
+---
+
+## 6. Environment Variables (`.env.local`)
+
+Create `.env.local` in the project root:
+
+```ini
+# Supabase Database & Auth (Project: gqvmdrtlocvidjtiyycv)
+NEXT_PUBLIC_SUPABASE_URL=https://gqvmdrtlocvidjtiyycv.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# Optional: Sentry Error Monitoring DSN
+# NEXT_PUBLIC_SENTRY_DSN=https://your-dsn@sentry.io/project
+```
+
+> [!WARNING]
+> **Key Rotation Notice:** If you ever commit a key to version control, rotate it immediately in the Supabase Dashboard under *Project Settings → API → Regenerate Anon Key*.
+
+---
+
+## 7. Development & Production Runbook
 
 ### Prerequisites
-
-- Node.js `v18.17` or later (tested on `v21.7.2`)
-- npm or yarn
+* Node.js `v18.17+` (recommended: Node 20 or 22)
+* npm or yarn
 
 ### Installation
-
 ```bash
-# Clone the repository
 git clone https://github.com/AnandBinuArjun/Indie_Summer.git
 cd Indie_Summer
-
-# Install dependencies
 npm install
 ```
 
-### Running Locally
-
+### Local Development Server
 ```bash
-# Start development server
 npm run dev
-
-# Open in browser
-# http://localhost:3000
+# Server listening at http://localhost:3000
 ```
 
-### Building for Production
-
+### Production Build & Static Validation
 ```bash
-# Compile and prerender SSR pages
 npm run build
-
-# Start production server
+# Compiles all 24 static and dynamic routes via Turbopack
 npm start
 ```
 
 ---
 
-## License
+## 8. Directory Structure
+
+```
+├── src/
+│   ├── app/
+│   │   ├── admin/             # Atelier control portal & staff login
+│   │   ├── product/[id]/      # 1-of-1 relic showcase & live bidding engine
+│   │   ├── shop/              # Catalog archive with category/auction filtering
+│   │   ├── track/             # Secured 2-factor dispatch tracking portal
+│   │   ├── privacy/           # DPDPA 2023 compliant privacy policy
+│   │   ├── terms/             # Auction & handloom terms of service
+│   │   ├── shipping-returns/  # Pan-India insured air courier policy
+│   │   ├── sitemap.js         # Dynamic search engine sitemap
+│   │   ├── robots.js          # Bot indexing directives
+│   │   ├── error.jsx          # Client-side exception boundary
+│   │   ├── global-error.jsx   # Root layout fatal crash boundary
+│   │   └── layout.jsx         # Root layout with fonts & cookie consent
+│   ├── components/            # Cart drawer, checkout, modals, navbar, footer
+│   ├── context/               # StoreContext global state & Supabase sync
+│   ├── data/                  # Seed catalog (products.js)
+│   └── lib/                   # Supabase client, logger, and orderStorage
+├── supabase_schema.sql        # Canonical DDL schema & Row Level Security
+└── README.md                  # Project documentation
+```
+
+---
+
+## 9. License
 
 © INDIE SUMMER ATELIER. All rights reserved. One Design. One Piece. Never Again.
