@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { PRODUCTS as INITIAL_PRODUCTS } from "../data/products";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { saveLocalOrder } from "../lib/orderStorage";
+import { logger } from "../lib/logger";
 
 const StoreContext = createContext(null);
 
@@ -278,6 +280,27 @@ export function StoreProvider({ children }) {
     };
   };
 
+  const getProductDisplayPrice = (product, curr = currency) => {
+    if (!product) return "";
+    const bidding = getBiddingInfo(product);
+    if (bidding) {
+      return `₹${bidding.currentBidINR.toLocaleString("en-IN")}`;
+    }
+    switch (curr) {
+      case "USD":
+        return formatPrice(product.priceUSD || Math.round(product.priceINR / 83), "USD");
+      case "EUR":
+        return formatPrice(product.priceEUR || Math.round(product.priceINR / 90), "EUR");
+      case "GBP":
+        return formatPrice(product.priceGBP || Math.round(product.priceINR / 105), "GBP");
+      case "AED":
+        return formatPrice(product.priceAED || Math.round(product.priceINR / 22), "AED");
+      case "INR":
+      default:
+        return formatPrice(product.priceINR, "INR");
+    }
+  };
+
   const placeBid = async (product, bidAmountINR, bidderName = "You (Verified Patron)") => {
     const info = getBiddingInfo(product);
     if (!info) return { success: false, message: "This piece is not open for bidding." };
@@ -390,12 +413,17 @@ export function StoreProvider({ children }) {
             price_inr: updated.priceINR,
             category: updated.category,
             is_bidding: updated.isBidding,
-            current_bid_inr: updated.currentBidINR,
+            starting_bid_inr: updated.startingBidINR ?? updated.priceINR,
+            current_bid_inr: updated.currentBidINR ?? updated.priceINR,
             min_bid_increment_inr: updated.minBidIncrementINR || 500,
+            bids_count: updated.bidsCount || 0,
             status: updated.status,
             material: updated.material,
             origin: updated.origin,
-            description: updated.description
+            image_primary: updated.imagePrimary,
+            image_secondary: updated.imageSecondary || null,
+            description: updated.description,
+            auction_end_time: updated.auctionEndTime || null
           })
           .eq("id", updated.id);
       } catch (err) {
@@ -467,6 +495,68 @@ export function StoreProvider({ children }) {
     }
   };
 
+  // CHECKOUT & ORDERS PERSISTENCE
+  const createOrder = async (orderPayload) => {
+    const orderId = orderPayload.id || `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const fullOrder = {
+      id: orderId,
+      order_ref: orderPayload.orderRef,
+      customer_name: orderPayload.customerName,
+      customer_email: orderPayload.customerEmail || "",
+      customer_phone: orderPayload.customerPhone || "",
+      customer_address: orderPayload.customerAddress || "",
+      customer_city: orderPayload.customerCity || "",
+      customer_pincode: orderPayload.customerPincode || "",
+      payment_method: orderPayload.paymentMethod || "upi",
+      total_amount_inr: Number(orderPayload.totalAmountINR || 0),
+      items: orderPayload.items || [],
+      status: "confirmed",
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Cache order locally for instant client access
+    saveLocalOrder(fullOrder);
+
+    // 2. Persist to Supabase orders table
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("orders").insert({
+          id: fullOrder.id,
+          order_ref: fullOrder.order_ref,
+          customer_name: fullOrder.customer_name,
+          customer_email: fullOrder.customer_email,
+          customer_phone: fullOrder.customer_phone,
+          customer_address: fullOrder.customer_address,
+          customer_city: fullOrder.customer_city,
+          customer_pincode: fullOrder.customer_pincode,
+          payment_method: fullOrder.payment_method,
+          total_amount_inr: fullOrder.total_amount_inr,
+          items: fullOrder.items,
+          status: fullOrder.status
+        });
+        if (error) logger.error("Supabase order insert error:", error);
+      } catch (err) {
+        logger.error("Supabase order persistence error:", err);
+      }
+    }
+
+    // 3. Mark 1-of-1 pieces in the order as sold
+    if (fullOrder.items && fullOrder.items.length > 0) {
+      for (const item of fullOrder.items) {
+        const targetProd = products.find((p) => p.id === item.id);
+        if (targetProd && targetProd.isOneOfOne) {
+          updateProduct({ ...targetProd, status: "sold" });
+        }
+      }
+    }
+
+    // 4. Clear the shopping bag
+    setCart([]);
+    localStorage.removeItem("indie_summer_cart");
+
+    return fullOrder;
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -493,12 +583,14 @@ export function StoreProvider({ children }) {
         toggleWishlist,
         moveWishlistToCart,
         formatPrice,
+        getProductDisplayPrice,
         getSubtotal,
         getCartTotal,
         clearCart: () => setCart([]),
         bidsData,
         getBiddingInfo,
         placeBid,
+        createOrder,
         // Admin & Customization
         products,
         siteSettings,

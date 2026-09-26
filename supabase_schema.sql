@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   image_secondary TEXT,
   description TEXT,
   details JSONB DEFAULT '[]'::jsonb,
+  auction_end_time TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -70,23 +71,47 @@ CREATE TABLE IF NOT EXISTS public.orders (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ENABLE ROW LEVEL SECURITY (RLS) & OPEN POLICIES FOR STOREFRONT & ADMIN
+-- 5. OBSERVABILITY & ERROR LOGS TABLE
+CREATE TABLE IF NOT EXISTS public.error_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message TEXT NOT NULL,
+  stack TEXT,
+  context JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bids ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.error_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read on products" ON public.products FOR SELECT USING (true);
-CREATE POLICY "Allow public write on products" ON public.products FOR ALL USING (true);
+CREATE POLICY "Public can log errors" ON public.error_logs FOR INSERT WITH CHECK (true);
+CREATE POLICY "Staff can view error logs" ON public.error_logs FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Allow public read on bids" ON public.bids FOR SELECT USING (true);
-CREATE POLICY "Allow public insert on bids" ON public.bids FOR INSERT WITH CHECK (true);
+-- Products: Public read, authenticated staff write
+CREATE POLICY "Public can view products" ON public.products FOR SELECT USING (true);
+CREATE POLICY "Staff can manage products" ON public.products FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Allow public read on site_settings" ON public.site_settings FOR SELECT USING (true);
-CREATE POLICY "Allow public write on site_settings" ON public.site_settings FOR ALL USING (true);
+-- Bids: Public read, validated public insert, staff management
+CREATE POLICY "Public can view bids" ON public.bids FOR SELECT USING (true);
+CREATE POLICY "Public can place validated bids" ON public.bids FOR INSERT WITH CHECK (
+  amount_inr > 0 AND length(trim(bidder_name)) >= 2 AND product_id IS NOT NULL
+);
+CREATE POLICY "Staff can manage bids" ON public.bids FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Allow public read on orders" ON public.orders FOR SELECT USING (true);
-CREATE POLICY "Allow public insert on orders" ON public.orders FOR INSERT WITH CHECK (true);
+-- Site Settings: Public read, authenticated staff write
+CREATE POLICY "Public can view site settings" ON public.site_settings FOR SELECT USING (true);
+CREATE POLICY "Staff can manage site settings" ON public.site_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Orders: Public guest insert, authenticated staff view/manage (protects PII)
+CREATE POLICY "Shoppers can submit checkout orders" ON public.orders FOR INSERT WITH CHECK (
+  total_amount_inr > 0 AND length(trim(customer_name)) >= 2 AND length(trim(order_ref)) >= 6
+);
+CREATE POLICY "Staff can view customer orders" ON public.orders FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Staff can update customer orders" ON public.orders FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Staff can delete customer orders" ON public.orders FOR DELETE TO authenticated USING (true);
 
 -- SEED INITIAL SITE SETTINGS
 INSERT INTO public.site_settings (key, value)
