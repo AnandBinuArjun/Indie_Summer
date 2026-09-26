@@ -17,18 +17,21 @@ import {
   AlertCircle
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import ProductCard from "../../../components/ProductCard";
 import { useStore } from "../../../context/StoreContext";
 
 export default function ProductDetailClient({ product }) {
   const router = useRouter();
   const {
+    products,
     currency,
     formatPrice,
     addToCart,
     wishlist,
     toggleWishlist,
     getBiddingInfo,
-    placeBid
+    placeBid,
+    getProductDisplayPrice
   } = useStore();
 
   const bidding = getBiddingInfo(product);
@@ -76,24 +79,7 @@ export default function ProductDetailClient({ product }) {
 
   const isWishlisted = wishlist.some((w) => w.id === product.id);
 
-  const getProductPrice = () => {
-    if (bidding) {
-      return `₹${bidding.currentBidINR.toLocaleString("en-IN")}`;
-    }
-    switch (currency) {
-      case "USD":
-        return formatPrice(product.priceUSD, "USD");
-      case "EUR":
-        return formatPrice(product.priceEUR, "EUR");
-      case "GBP":
-        return formatPrice(product.priceGBP, "GBP");
-      case "AED":
-        return formatPrice(product.priceAED, "AED");
-      case "INR":
-      default:
-        return formatPrice(product.priceINR, "INR");
-    }
-  };
+  const getProductPrice = () => getProductDisplayPrice(product);
 
   const handleAdd = () => {
     addToCart({
@@ -955,6 +941,45 @@ export default function ProductDetailClient({ product }) {
             </div>
           </div>
         </div>
+
+        {/* Curated Cross-Sell: Related Archival Relics */}
+        {products && products.length > 1 && (
+          <div style={{ marginTop: "6rem", paddingTop: "4rem", borderTop: "1px solid var(--color-border)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1rem", marginBottom: "2.5rem" }}>
+              <div>
+                <span className="maru-eyebrow" style={{ color: "var(--color-siren)" }}>
+                  PARALLEL PROVENANCE · VOLUME 001
+                </span>
+                <h2 className="font-display" style={{ fontSize: "clamp(2rem, 4vw, 2.8rem)", marginTop: "4px" }}>
+                  OTHER 1-OF-1 ARCHIVAL PIECES
+                </h2>
+              </div>
+              <Link
+                href="/shop"
+                style={{
+                  fontSize: "0.74rem",
+                  fontFamily: "var(--font-sans)",
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--color-ink)",
+                  textDecoration: "underline"
+                }}
+              >
+                VIEW FULL ARCHIVE CATALOGUE →
+              </Link>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "2rem" }}>
+              {products
+                .filter((p) => p.id !== product.id)
+                .slice(0, 3)
+                .map((relProd) => (
+                  <ProductCard key={relProd.id} product={relProd} />
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

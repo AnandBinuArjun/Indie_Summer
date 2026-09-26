@@ -14,30 +14,14 @@ export default function ProductCard({ product }) {
     wishlist,
     toggleWishlist,
     setActiveQuickViewProduct,
-    getBiddingInfo
+    getBiddingInfo,
+    getProductDisplayPrice
   } = useStore();
 
   const bidding = getBiddingInfo(product);
   const isWishlisted = wishlist.some((w) => w.id === product.id);
 
-  const getProductPrice = () => {
-    if (bidding) {
-      return formatPrice(bidding.currentBidINR, "INR");
-    }
-    switch (currency) {
-      case "USD":
-        return formatPrice(product.priceUSD, "USD");
-      case "EUR":
-        return formatPrice(product.priceEUR, "EUR");
-      case "GBP":
-        return formatPrice(product.priceGBP, "GBP");
-      case "AED":
-        return formatPrice(product.priceAED, "AED");
-      case "INR":
-      default:
-        return formatPrice(product.priceINR, "INR");
-    }
-  };
+  const getProductPrice = () => getProductDisplayPrice(product);
 
   const handleQuickAdd = (e) => {
     e.preventDefault();

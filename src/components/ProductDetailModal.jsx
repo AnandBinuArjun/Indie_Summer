@@ -14,7 +14,8 @@ export default function ProductDetailModal() {
     addToCart,
     wishlist,
     toggleWishlist,
-    getBiddingInfo
+    getBiddingInfo,
+    getProductDisplayPrice
   } = useStore();
 
   const bidding = product ? getBiddingInfo(product) : null;
@@ -29,24 +30,7 @@ export default function ProductDetailModal() {
 
   const isWishlisted = wishlist.some((w) => w.id === product.id);
 
-  const getProductPrice = () => {
-    if (bidding) {
-      return `₹${bidding.currentBidINR.toLocaleString("en-IN")}`;
-    }
-    switch (currency) {
-      case "USD":
-        return formatPrice(product.priceUSD, "USD");
-      case "EUR":
-        return formatPrice(product.priceEUR, "EUR");
-      case "GBP":
-        return formatPrice(product.priceGBP, "GBP");
-      case "AED":
-        return formatPrice(product.priceAED, "AED");
-      case "INR":
-      default:
-        return formatPrice(product.priceINR, "INR");
-    }
-  };
+  const getProductPrice = () => getProductDisplayPrice(product);
 
   const handleAdd = () => {
     addToCart({
