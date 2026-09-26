@@ -10,6 +10,7 @@ import CheckoutModal from "../components/CheckoutModal";
 import ProductDetailModal from "../components/ProductDetailModal";
 import CookieBanner from "../components/CookieBanner";
 import Analytics from "../components/Analytics";
+import WhatsAppConcierge from "../components/WhatsAppConcierge";
 import "../lib/logger";
 
 export const viewport = {
@@ -81,6 +82,7 @@ export default function RootLayout({ children }) {
           <ProductDetailModal />
           <CookieBanner />
           <Analytics />
+          <WhatsAppConcierge />
         </StoreProvider>
       </body>
     </html>

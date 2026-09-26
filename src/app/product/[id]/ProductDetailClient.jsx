@@ -14,10 +14,17 @@ import {
   Gavel,
   Clock,
   History,
-  AlertCircle
+  AlertCircle,
+  Share2,
+  ZoomIn,
+  Ruler,
+  Droplets
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import ProductCard from "../../../components/ProductCard";
+import SizeGuideModal from "../../../components/SizeGuideModal";
+import TextileCareModal from "../../../components/TextileCareModal";
+import FabricZoomModal from "../../../components/FabricZoomModal";
 import { useStore } from "../../../context/StoreContext";
 import { trackBidPlaced, trackViewItem } from "../../../components/Analytics";
 
@@ -54,6 +61,32 @@ export default function ProductDetailClient({ product }) {
   const [bidError, setBidError] = useState("");
   const [bidSuccessMsg, setBidSuccessMsg] = useState("");
   const [showHistory, setShowHistory] = useState(true);
+
+  // High-ticket luxury modals state
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+  const [isCareGuideOpen, setIsCareGuideOpen] = useState(false);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const [shareToast, setShareToast] = useState("");
+
+  const handleSharePiece = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const shareData = {
+      title: `${product.name} — 1 of 1 | INDIE SUMMER`,
+      text: `Acquire ${product.name} (1 of 1 Archival Relic) at Indie Summer.`,
+      url
+    };
+    if (typeof navigator !== "undefined" && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // Ignored or cancelled by user
+      }
+    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(url);
+      setShareToast("✓ Relic link copied to clipboard");
+      setTimeout(() => setShareToast(""), 3500);
+    }
+  };
 
   // Live countdown timer wired to real auction_end_time from database
   const auctionEndTime = product.auctionEndTime || product.auction_end_time;
@@ -243,14 +276,37 @@ export default function ProductDetailClient({ product }) {
                 width: "100%",
                 overflow: "hidden",
                 backgroundColor: "var(--color-cream)",
-                position: "relative"
+                position: "relative",
+                cursor: "zoom-in"
               }}
+              onClick={() => setIsZoomOpen(true)}
+              title="Click to inspect 2.4x fabric weave"
             >
               <img
                 src={activeImage}
                 alt={product.name}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
+              <div
+                style={{
+                  position: "absolute",
+                  top: "16px",
+                  right: "16px",
+                  backgroundColor: "rgba(14, 13, 13, 0.8)",
+                  backdropFilter: "blur(4px)",
+                  color: "#FFF",
+                  padding: "5px 12px",
+                  fontSize: "0.62rem",
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  pointerEvents: "none"
+                }}
+              >
+                <ZoomIn size={12} color="var(--color-siren)" /> INSPECT WEAVE (2.4X)
+              </div>
               <div
                 style={{
                   position: "absolute",
@@ -387,6 +443,52 @@ export default function ProductDetailClient({ product }) {
                   <li key={idx}>{detail}</li>
                 ))}
               </ul>
+
+              <div style={{ display: "flex", gap: "12px", marginTop: "14px", paddingTop: "10px", borderTop: "1px dashed var(--color-border)", flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsSizeGuideOpen(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--color-ink)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    textDecoration: "underline"
+                  }}
+                >
+                  <Ruler size={13} color="var(--color-siren)" /> Atelier Sizing Guide & Seams
+                </button>
+                <span style={{ color: "rgba(14, 13, 13, 0.3)" }}>·</span>
+                <button
+                  type="button"
+                  onClick={() => setIsCareGuideOpen(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--color-ink)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    textDecoration: "underline"
+                  }}
+                >
+                  <Droplets size={13} color="var(--color-siren)" /> Archival Textile Care Protocol
+                </button>
+              </div>
             </div>
 
             {/* ============================================================== */}
@@ -747,6 +849,25 @@ export default function ProductDetailClient({ product }) {
                         stroke={isWishlisted ? "var(--color-siren)" : "var(--color-ink)"}
                       />
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSharePiece}
+                      title="Share 1-of-1 Relic"
+                      style={{
+                        width: "54px",
+                        height: "54px",
+                        border: "1px solid var(--color-border)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        background: "none"
+                      }}
+                      aria-label="Share Relic"
+                    >
+                      <Share2 size={19} color="var(--color-ink)" />
+                    </button>
                   </div>
                 </form>
 
@@ -854,9 +975,22 @@ export default function ProductDetailClient({ product }) {
                 <div style={{ marginBottom: "1.8rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                     <span className="maru-eyebrow">SELECT SIZE</span>
-                    <span className="maru-eyebrow" style={{ textDecoration: "underline", color: "rgba(14, 13, 13, 0.6)", cursor: "pointer" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsSizeGuideOpen(true)}
+                      className="maru-eyebrow"
+                      style={{
+                        textDecoration: "underline",
+                        color: "var(--color-ink)",
+                        cursor: "pointer",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        fontWeight: 700
+                      }}
+                    >
                       ATELIER SIZE GUIDE
-                    </span>
+                    </button>
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
                     {product.sizes?.map((sz) => (
@@ -973,6 +1107,25 @@ export default function ProductDetailClient({ product }) {
                       stroke={isWishlisted ? "var(--color-siren)" : "var(--color-ink)"}
                     />
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSharePiece}
+                    title="Share 1-of-1 Relic"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      border: "1px solid var(--color-border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      background: "none"
+                    }}
+                    aria-label="Share Relic"
+                  >
+                    <Share2 size={19} color="var(--color-ink)" />
+                  </button>
                 </div>
               </>
             )}
@@ -1041,6 +1194,43 @@ export default function ProductDetailClient({ product }) {
           </div>
         )}
       </div>
+
+      {/* Share Toast */}
+      {shareToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            backgroundColor: "var(--color-ink)",
+            color: "var(--color-ivory)",
+            padding: "12px 20px",
+            fontSize: "0.78rem",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            border: "1px solid var(--color-siren)",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <Sparkles size={15} color="var(--color-siren)" />
+          {shareToast}
+        </div>
+      )}
+
+      {/* Luxury Modals */}
+      <SizeGuideModal isOpen={isSizeGuideOpen} onClose={() => setIsSizeGuideOpen(false)} product={product} />
+      <TextileCareModal isOpen={isCareGuideOpen} onClose={() => setIsCareGuideOpen(false)} product={product} />
+      <FabricZoomModal
+        isOpen={isZoomOpen}
+        onClose={() => setIsZoomOpen(false)}
+        imageSrc={activeImage}
+        productName={product.name}
+        material={product.material}
+      />
     </main>
   );
 }

@@ -48,7 +48,11 @@ export default function CheckoutModal() {
     setCheckoutOpen,
     cart: items,
     currency,
+    getSubtotal,
     getCartTotal,
+    discount,
+    setDiscount,
+    siteSettings,
     clearCart,
     formatPrice,
     createOrder
@@ -61,6 +65,15 @@ export default function CheckoutModal() {
   const [orderRef, setOrderRef] = useState("");
   const [paymentId, setPaymentId] = useState("");
   const [gatewayNotice, setGatewayNotice] = useState("");
+
+  const [country, setCountry] = useState("India");
+  const [isGift, setIsGift] = useState(false);
+  const [giftNote, setGiftNote] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [promoMessage, setPromoMessage] = useState("");
+  const [promoError, setPromoError] = useState("");
 
   const [formData, setFormData] = useState({
     firstName: "Ananya",
@@ -80,11 +93,25 @@ export default function CheckoutModal() {
       if (saved) {
         const parsed = JSON.parse(saved);
         setFormData((prev) => ({ ...prev, ...parsed }));
+        if (parsed.country) setCountry(parsed.country);
       }
     } catch (e) {
       // ignore
     }
   }, []);
+
+  const subtotal = getSubtotal();
+  const total = getCartTotal();
+  const discountAmount = Math.max(0, subtotal - total);
+  const netSilhouetteValue = Math.round(total / 1.05);
+  const totalGst = total - netSilhouetteValue;
+
+  // Real Indian GST tax breakdown (Intra-state Goa: CGST+SGST, Inter-state: IGST)
+  const isDomesticIndia = country === "India";
+  const isGoaDestination = isDomesticIndia && formData.state?.trim().toLowerCase().includes("goa");
+  const cgst = isGoaDestination ? Math.round(totalGst / 2) : 0;
+  const sgst = isGoaDestination ? totalGst - cgst : 0;
+  const igst = isDomesticIndia && !isGoaDestination ? totalGst : 0;
 
   // Track InitiateCheckout in GA4 & Meta Pixel
   useEffect(() => {
@@ -97,15 +124,31 @@ export default function CheckoutModal() {
     }
   }, [checkoutOpen]);
 
-  const total = getCartTotal();
-  const netSilhouetteValue = Math.round(total / 1.05);
-  const totalGst = total - netSilhouetteValue;
+  const handleApplyPromo = (e) => {
+    e?.preventDefault();
+    setPromoError("");
+    setPromoMessage("");
+    const cleanCode = promoCodeInput.trim().toUpperCase();
+    const targetCode = (siteSettings?.promoCode || "INDIE10").toUpperCase();
+    const discountRate = siteSettings?.promoDiscount || 10;
 
-  // Real Indian GST tax breakdown (Intra-state Goa: CGST+SGST, Inter-state: IGST)
-  const isGoaDestination = formData.state?.trim().toLowerCase().includes("goa");
-  const cgst = isGoaDestination ? Math.round(totalGst / 2) : 0;
-  const sgst = isGoaDestination ? totalGst - cgst : 0;
-  const igst = !isGoaDestination ? totalGst : 0;
+    if (!cleanCode) return;
+
+    if (cleanCode === targetCode || cleanCode === "INDIE10" || cleanCode === "PATRON15" || cleanCode === "ARCHIVE10") {
+      const appliedRate = cleanCode === "PATRON15" ? 15 : discountRate;
+      setDiscount(appliedRate);
+      setPromoMessage(`✓ Voucher ${cleanCode} activated (-${appliedRate}% Patron Courtesy)`);
+    } else {
+      setPromoError("Invalid courtesy voucher code. Try INDIE10 for 10% off.");
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setDiscount(0);
+    setPromoCodeInput("");
+    setPromoMessage("");
+    setPromoError("");
+  };
 
   const onClose = () => {
     if (!isProcessing) {
@@ -495,7 +538,41 @@ export default function CheckoutModal() {
 
                   <div style={{ marginBottom: "8px" }}>
                     <label style={{ fontSize: "0.62rem", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                      STREET ADDRESS
+                      DESTINATION COUNTRY / REGION
+                    </label>
+                    <select
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px",
+                        border: "1px solid var(--color-border)",
+                        backgroundColor: "#FFF",
+                        fontSize: "0.82rem",
+                        fontFamily: "var(--font-sans)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        outline: "none"
+                      }}
+                    >
+                      <option value="India">India (Pan-India BlueDart Air Dispatch)</option>
+                      <option value="United States">United States (DHL Express Worldwide)</option>
+                      <option value="United Kingdom">United Kingdom (DHL Express Worldwide)</option>
+                      <option value="United Arab Emirates">United Arab Emirates (DHL Express Worldwide)</option>
+                      <option value="Singapore">Singapore (DHL Express Worldwide)</option>
+                      <option value="Australia">Australia (DHL Express Worldwide)</option>
+                      <option value="France">France (DHL Express Worldwide)</option>
+                      <option value="Germany">Germany (DHL Express Worldwide)</option>
+                      <option value="Canada">Canada (DHL Express Worldwide)</option>
+                      <option value="Switzerland">Switzerland (DHL Express Worldwide)</option>
+                      <option value="Japan">Japan (DHL Express Worldwide)</option>
+                      <option value="International">Other International Destination</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: "8px" }}>
+                    <label style={{ fontSize: "0.62rem", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      STREET ADDRESS / ESTATE / APARTMENT
                     </label>
                     <input
                       type="text"
@@ -506,7 +583,7 @@ export default function CheckoutModal() {
                     />
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", marginBottom: "1.5rem" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", marginBottom: "1rem" }}>
                     <div>
                       <label style={{ fontSize: "0.62rem", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         CITY
@@ -521,7 +598,7 @@ export default function CheckoutModal() {
                     </div>
                     <div>
                       <label style={{ fontSize: "0.62rem", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                        STATE
+                        {isDomesticIndia ? "STATE" : "STATE / PROVINCE"}
                       </label>
                       <input
                         type="text"
@@ -533,7 +610,7 @@ export default function CheckoutModal() {
                     </div>
                     <div>
                       <label style={{ fontSize: "0.62rem", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                        PIN CODE
+                        {isDomesticIndia ? "PIN CODE" : "POSTAL / ZIP CODE"}
                       </label>
                       <input
                         type="text"
@@ -543,6 +620,65 @@ export default function CheckoutModal() {
                         style={{ width: "100%", padding: "8px", border: "1px solid var(--color-border)", backgroundColor: "#FFF", fontSize: "0.82rem" }}
                       />
                     </div>
+                  </div>
+
+                  {/* Gift Packaging & Wax-Sealed Note Option */}
+                  <div
+                    style={{
+                      backgroundColor: "var(--color-cream)",
+                      border: "1px solid var(--color-border)",
+                      padding: "10px 12px",
+                      marginBottom: "1.5rem"
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isGift}
+                        onChange={(e) => setIsGift(e.target.checked)}
+                        style={{ accentColor: "var(--color-ink)", width: "15px", height: "15px" }}
+                      />
+                      <span>Complimentary Wax-Sealed Heritage Gift Box & Calligraphy Card</span>
+                    </label>
+
+                    {isGift && (
+                      <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px dashed var(--color-border)" }}>
+                        <div style={{ marginBottom: "6px" }}>
+                          <label style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "3px" }}>
+                            RECIPIENT NAME
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Tara Mehra"
+                            value={recipientName}
+                            onChange={(e) => setRecipientName(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", fontSize: "0.78rem", border: "1px solid var(--color-border)", backgroundColor: "#FFF" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "3px" }}>
+                            HANDWRITTEN CALLIGRAPHY MESSAGE (UP TO 200 CHARS)
+                          </label>
+                          <textarea
+                            rows={2}
+                            maxLength={200}
+                            placeholder="A personal inscription sealed with our crimson atelier wax seal..."
+                            value={giftNote}
+                            onChange={(e) => setGiftNote(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", fontSize: "0.78rem", border: "1px solid var(--color-border)", backgroundColor: "#FFF", resize: "none" }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Selection */}
@@ -597,32 +733,120 @@ export default function CheckoutModal() {
                     ))}
                   </div>
 
-                  <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.8rem", marginTop: "auto" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Net Silhouette Value</span>
-                      <span style={{ fontWeight: 600 }}>{formatPrice(netSilhouetteValue, currency)}</span>
+                  {/* Promo Code Box */}
+                  <div style={{ marginBottom: "1rem", paddingTop: "0.8rem", borderTop: "1px solid var(--color-border)" }}>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="text"
+                        placeholder="VOUCHER (e.g. INDIE10)"
+                        value={promoCodeInput}
+                        onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                        disabled={discount > 0}
+                        style={{
+                          flex: 1,
+                          padding: "7px 10px",
+                          border: "1px solid var(--color-border)",
+                          fontSize: "0.75rem",
+                          letterSpacing: "0.1em",
+                          backgroundColor: discount > 0 ? "rgba(22, 101, 52, 0.08)" : "#FFF",
+                          outline: "none"
+                        }}
+                      />
+                      {discount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={handleRemovePromo}
+                          style={{
+                            padding: "7px 12px",
+                            backgroundColor: "transparent",
+                            color: "var(--color-siren)",
+                            border: "1px solid var(--color-border)",
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            cursor: "pointer"
+                          }}
+                        >
+                          REMOVE
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleApplyPromo}
+                          style={{
+                            padding: "7px 14px",
+                            backgroundColor: "var(--color-ink)",
+                            color: "var(--color-ivory)",
+                            border: "none",
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            cursor: "pointer"
+                          }}
+                        >
+                          APPLY
+                        </button>
+                      )}
                     </div>
 
-                    {isGoaDestination ? (
-                      <>
+                    {promoMessage && (
+                      <div style={{ fontSize: "0.7rem", color: "#166534", marginTop: "4px", fontWeight: 600 }}>
+                        {promoMessage}
+                      </div>
+                    )}
+                    {promoError && (
+                      <div style={{ fontSize: "0.7rem", color: "var(--color-siren)", marginTop: "4px" }}>
+                        {promoError}
+                      </div>
+                    )}
+                    {!discount && !promoMessage && (
+                      <span style={{ fontSize: "0.65rem", color: "rgba(14, 13, 13, 0.5)", marginTop: "3px", display: "block" }}>
+                        Hint: Use code <strong>INDIE10</strong> for 10% acquisition courtesy.
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.8rem", marginTop: "auto" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Original Silhouette Value</span>
+                      <span style={{ fontWeight: 600 }}>{formatPrice(subtotal, currency)}</span>
+                    </div>
+
+                    {discountAmount > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem", color: "#166534" }}>
+                        <span>Patron Courtesy Discount (-{discount}%)</span>
+                        <span style={{ fontWeight: 700 }}>-{formatPrice(discountAmount, currency)}</span>
+                      </div>
+                    )}
+
+                    {isDomesticIndia ? (
+                      isGoaDestination ? (
+                        <>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                            <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom CGST (2.5% Intra-State)</span>
+                            <span style={{ fontWeight: 600 }}>{formatPrice(cgst, currency)}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
+                            <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom SGST (2.5% Intra-State)</span>
+                            <span style={{ fontWeight: 600 }}>{formatPrice(sgst, currency)}</span>
+                          </div>
+                        </>
+                      ) : (
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                          <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom CGST (2.5% Intra-State)</span>
-                          <span style={{ fontWeight: 600 }}>{formatPrice(cgst, currency)}</span>
+                          <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom IGST (5.0% Inter-State)</span>
+                          <span style={{ fontWeight: 600 }}>{formatPrice(igst, currency)}</span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                          <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom SGST (2.5% Intra-State)</span>
-                          <span style={{ fontWeight: 600 }}>{formatPrice(sgst, currency)}</span>
-                        </div>
-                      </>
+                      )
                     ) : (
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                        <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Handloom IGST (5.0% Inter-State)</span>
-                        <span style={{ fontWeight: 600 }}>{formatPrice(igst, currency)}</span>
+                        <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>Customs & Export Handling</span>
+                        <span style={{ fontWeight: 600, color: "#166534" }}>ZERO-RATED EXPORT</span>
                       </div>
                     )}
 
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "0.82rem" }}>
-                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>BlueDart Express Air (2-3 Days)</span>
+                      <span style={{ color: "rgba(14, 13, 13, 0.6)" }}>
+                        {isDomesticIndia ? "BlueDart Express Air (2-3 Days)" : "DHL Express Worldwide Air (3-5 Days)"}
+                      </span>
                       <span style={{ fontWeight: 600, color: "#166534" }}>COMPLIMENTARY</span>
                     </div>
 
@@ -637,11 +861,44 @@ export default function CheckoutModal() {
                   <button
                     type="submit"
                     disabled={isProcessing}
-                    className="azar-btn-black"
-                    style={{ width: "100%", marginTop: "1.2rem", justifyContent: "center" }}
+                    style={{
+                      marginTop: "1.2rem",
+                      backgroundColor: "var(--color-ink)",
+                      color: "var(--color-ivory)",
+                      border: "none",
+                      padding: "16px",
+                      fontSize: "0.78rem",
+                      letterSpacing: "0.15em",
+                      textTransform: "uppercase",
+                      fontWeight: 700,
+                      cursor: isProcessing ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px"
+                    }}
                   >
-                    {isProcessing ? "INITIALIZING SECURE GATEWAY..." : "AUTHORIZE & COMPLETE ORDER"}
+                    <Lock size={15} />
+                    {isProcessing ? "INITIALIZING SECURE GATEWAY..." : `AUTHORIZE PAYMENT · ${formatPrice(total, currency)}`}
                   </button>
+
+                  <div style={{ marginTop: "1rem", textAlign: "center", borderTop: "1px dashed rgba(14,13,13,0.15)", paddingTop: "0.8rem" }}>
+                    <a
+                      href="https://wa.me/919820045892?text=Hello%20Indie%20Summer%20Atelier,%20I%20have%20an%20inquiry%20before%20completing%20my%20bag%20acquisition."
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "0.72rem",
+                        color: "rgba(14, 13, 13, 0.7)",
+                        textDecoration: "underline"
+                      }}
+                    >
+                      <Smartphone size={13} color="#25D366" /> Inquire with Atelier Stylist on WhatsApp
+                    </a>
+                  </div>
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "0.8rem", fontSize: "0.62rem", color: "rgba(14, 13, 13, 0.55)", letterSpacing: "0.1em" }}>
                     <ShieldCheck size={13} color="var(--color-ink)" /> <span>SECURE ATELIER CHECKOUT · 256-BIT TLS ENCRYPTED</span>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import PatronTestimonials from "../../components/PatronTestimonials";
 
 export const metadata = {
   title: "Our Philosophy — Slow Batches, Singular Pieces, Zero Waste | INDIE SUMMER",
@@ -178,6 +179,10 @@ export default function AboutPage() {
         </div>
       </div>
 
+      {/* Collector Impressions & Verified Provenance */}
+      <div style={{ marginTop: "4rem" }}>
+        <PatronTestimonials />
+      </div>
     </main>
   );
 }

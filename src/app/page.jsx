@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { PRODUCTS } from "../data/products";
 import ProductCard from "../components/ProductCard";
+import PatronTestimonials from "../components/PatronTestimonials";
 
 export const metadata = {
   title: "INDIE SUMMER — One Design. One Piece. Never Again.",
@@ -181,6 +182,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Social Proof & Collector Impressions */}
+      <PatronTestimonials />
     </div>
   );
 }
