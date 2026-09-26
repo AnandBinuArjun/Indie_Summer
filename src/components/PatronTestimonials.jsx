@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, Award, Sparkles, CheckCircle2 } from "lucide-react";
+import { Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function PatronTestimonials() {
   const testimonials = [
@@ -44,16 +44,16 @@ export default function PatronTestimonials() {
   return (
     <section
       style={{
-        backgroundColor: "var(--color-ink)",
-        color: "var(--color-ivory)",
-        padding: "7.5rem 0 6.5rem 0",
+        backgroundColor: "var(--color-cream)",
+        color: "var(--color-ink)",
+        padding: "6.5rem 0",
         position: "relative",
-        borderTop: "1px solid rgba(251, 251, 247, 0.12)"
+        borderTop: "1px solid var(--color-border)"
       }}
     >
       <div className="site-container">
         {/* Section Eyebrow & Title */}
-        <div style={{ maxWidth: "720px", marginBottom: "4rem" }}>
+        <div style={{ maxWidth: "720px", marginBottom: "3.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.8rem" }}>
             <Sparkles size={15} color="var(--color-siren)" />
             <span className="maru-eyebrow" style={{ color: "var(--color-siren)", letterSpacing: "0.2em" }}>
@@ -67,7 +67,8 @@ export default function PatronTestimonials() {
               fontSize: "clamp(2.6rem, 5.5vw, 4.4rem)",
               lineHeight: 0.95,
               textTransform: "uppercase",
-              letterSpacing: "-0.01em"
+              letterSpacing: "-0.01em",
+              color: "var(--color-ink)"
             }}
           >
             VOICES OF THE INAUGURAL CIRCLE<span style={{ color: "var(--color-siren)" }}>.</span>
@@ -77,7 +78,7 @@ export default function PatronTestimonials() {
               fontFamily: "var(--font-serif)",
               fontStyle: "italic",
               fontSize: "1.15rem",
-              color: "rgba(251, 251, 247, 0.75)",
+              color: "rgba(14, 13, 13, 0.75)",
               marginTop: "1.2rem",
               lineHeight: 1.6
             }}
@@ -92,20 +93,21 @@ export default function PatronTestimonials() {
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: "2rem",
-            marginBottom: "5rem"
+            marginBottom: "4.5rem"
           }}
         >
           {testimonials.map((t) => (
             <div
               key={t.id}
               style={{
-                backgroundColor: "rgba(251, 251, 247, 0.04)",
-                border: "1px solid rgba(251, 251, 247, 0.12)",
+                backgroundColor: "#FFFFFF",
+                border: "1px solid var(--color-border)",
                 padding: "2.4rem 2rem",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
-                position: "relative"
+                position: "relative",
+                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.03)"
               }}
             >
               <div style={{ marginBottom: "2rem" }}>
@@ -116,7 +118,7 @@ export default function PatronTestimonials() {
                     lineHeight: 0.8,
                     display: "block",
                     color: "var(--color-siren)",
-                    opacity: 0.8,
+                    opacity: 0.85,
                     marginBottom: "0.8rem"
                   }}
                 >
@@ -126,7 +128,7 @@ export default function PatronTestimonials() {
                   style={{
                     fontSize: "0.95rem",
                     lineHeight: 1.7,
-                    color: "rgba(251, 251, 247, 0.9)",
+                    color: "rgba(14, 13, 13, 0.85)",
                     fontFamily: "var(--font-sans)"
                   }}
                 >
@@ -134,23 +136,23 @@ export default function PatronTestimonials() {
                 </p>
               </div>
 
-              <div style={{ paddingTop: "1.4rem", borderTop: "1px dashed rgba(251, 251, 247, 0.15)" }}>
+              <div style={{ paddingTop: "1.4rem", borderTop: "1px dashed var(--color-border)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <h4 style={{ fontSize: "0.85rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  <h4 style={{ fontSize: "0.85rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-ink)" }}>
                     {t.author}
                   </h4>
                   <CheckCircle2 size={13} color="var(--color-siren)" />
                 </div>
-                <p style={{ fontSize: "0.72rem", color: "rgba(251, 251, 247, 0.55)", marginTop: "2px" }}>
+                <p style={{ fontSize: "0.72rem", color: "rgba(14, 13, 13, 0.55)", marginTop: "2px" }}>
                   {t.location} · {t.date}
                 </p>
                 <div
                   style={{
                     display: "inline-block",
                     marginTop: "8px",
-                    backgroundColor: "rgba(229, 56, 38, 0.15)",
-                    border: "1px solid var(--color-siren)",
-                    color: "var(--color-ivory)",
+                    backgroundColor: "rgba(229, 56, 38, 0.08)",
+                    border: "1px solid rgba(229, 56, 38, 0.25)",
+                    color: "var(--color-siren)",
                     padding: "3px 8px",
                     fontSize: "0.62rem",
                     letterSpacing: "0.1em",
@@ -168,7 +170,7 @@ export default function PatronTestimonials() {
         {/* Provenance & Craftsmanship Guarantee Metrics */}
         <div
           style={{
-            borderTop: "1px solid rgba(251, 251, 247, 0.15)",
+            borderTop: "1px solid var(--color-border)",
             paddingTop: "3.5rem",
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -195,12 +197,12 @@ export default function PatronTestimonials() {
                   textTransform: "uppercase",
                   fontWeight: 700,
                   marginTop: "6px",
-                  color: "var(--color-ivory)"
+                  color: "var(--color-ink)"
                 }}
               >
                 {m.label}
               </h4>
-              <p style={{ fontSize: "0.76rem", color: "rgba(251, 251, 247, 0.6)", marginTop: "4px", lineHeight: 1.5 }}>
+              <p style={{ fontSize: "0.76rem", color: "rgba(14, 13, 13, 0.65)", marginTop: "4px", lineHeight: 1.5 }}>
                 {m.desc}
               </p>
             </div>
