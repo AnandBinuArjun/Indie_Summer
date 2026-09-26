@@ -19,6 +19,7 @@ import {
 import confetti from "canvas-confetti";
 import ProductCard from "../../../components/ProductCard";
 import { useStore } from "../../../context/StoreContext";
+import { trackBidPlaced, trackViewItem } from "../../../components/Analytics";
 
 export default function ProductDetailClient({ product }) {
   const router = useRouter();
@@ -155,16 +156,30 @@ export default function ProductDetailClient({ product }) {
       return;
     }
 
+    let patronContact = {};
+    try {
+      const savedContact = localStorage.getItem("indie_summer_saved_contact");
+      if (savedContact) {
+        const parsed = JSON.parse(savedContact);
+        patronContact = { email: parsed.email, phone: parsed.phone };
+      }
+    } catch (e) {}
+
     const res = placeBid(
       product,
       numericBid,
-      `${bidderName}${bidderLocation ? ` (${bidderLocation})` : ""}`
+      `${bidderName}${bidderLocation ? ` (${bidderLocation})` : ""}`,
+      patronContact
     );
 
     if (!res.success) {
       setBidError(res.message);
       return;
     }
+
+    try {
+      trackBidPlaced(product, numericBid);
+    } catch (e) {}
 
     // Trigger celebratory luxury confetti
     try {

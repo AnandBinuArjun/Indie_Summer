@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingBag, Heart, Search, Menu, X } from "lucide-react";
+import { ShoppingBag, Heart, Search, Menu, X, User } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 
 export default function Navbar() {
@@ -162,6 +162,21 @@ export default function Navbar() {
                 )}
               </button>
 
+              {/* Patron Portal / Account */}
+              <Link
+                href="/account"
+                style={{
+                  padding: "6px",
+                  color: pathname === "/account" ? "var(--color-siren)" : "var(--color-ink)",
+                  display: "inline-flex",
+                  alignItems: "center"
+                }}
+                aria-label="Patron Portal"
+                title="Patron Vault & Bids"
+              >
+                <User size={19} />
+              </Link>
+
               {/* Bag / Cart */}
               <button
                 type="button"
@@ -249,19 +264,32 @@ export default function Navbar() {
               ))}
 
               <Link
+                href="/account"
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "1.4rem",
+                  textAlign: "left",
+                  color: pathname === "/account" ? "var(--color-siren)" : "rgba(14, 13, 13, 0.7)",
+                  borderTop: "1px dashed var(--color-border)",
+                  paddingTop: "1rem",
+                  marginTop: "0.5rem"
+                }}
+              >
+                PATRON PORTAL / WARDROBE ↗
+              </Link>
+
+              <Link
                 href="/track"
                 onClick={() => setMobileMenuOpen(false)}
                 style={{
                   fontFamily: "var(--font-display)",
                   fontSize: "1.4rem",
                   textAlign: "left",
-                  color: pathname === "/track" ? "var(--color-siren)" : "rgba(14, 13, 13, 0.7)",
-                  borderTop: "1px dashed var(--color-border)",
-                  paddingTop: "1rem",
-                  marginTop: "0.5rem"
+                  color: pathname === "/track" ? "var(--color-siren)" : "rgba(14, 13, 13, 0.7)"
                 }}
               >
-                TRACK ORDER ↗
+                TRACK DISPATCH ↗
               </Link>
             </div>
           </div>

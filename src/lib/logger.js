@@ -1,9 +1,48 @@
 /**
  * Central Observability & Error Tracking for Indie Summer
  * Captures unhandled client exceptions, checkout errors, and network failures.
+ * Integrates directly with Sentry APM and Supabase error logging.
  */
 
 import { supabase, isSupabaseConfigured } from "./supabase";
+
+const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
+
+// Dynamically initialize Sentry in the browser if DSN is configured
+if (typeof window !== "undefined" && SENTRY_DSN && !window.__sentry_initialized__) {
+  window.__sentry_initialized__ = true;
+  try {
+    const script = document.createElement("script");
+    script.src = "https://js.sentry-cdn.com/" + SENTRY_DSN.split("@")[0].split("//")[1] + ".min.js";
+    script.crossOrigin = "anonymous";
+    script.async = true;
+    script.onload = () => {
+      if (window.Sentry) {
+        window.Sentry.init({
+          dsn: SENTRY_DSN,
+          environment: process.env.NODE_ENV || "production",
+          tracesSampleRate: 0.2
+        });
+      }
+    };
+    document.head.appendChild(script);
+  } catch (e) {
+    console.warn("Sentry APM loader note:", e);
+  }
+
+  // Global browser error listeners
+  window.addEventListener("error", (event) => {
+    logger.error("Unhandled client error: " + event.message, event.error, {
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    logger.error("Unhandled Promise Rejection", event.reason);
+  });
+}
 
 export const logger = {
   error: async (message, error = null, context = {}) => {
@@ -21,7 +60,7 @@ export const logger = {
     // 1. Output formatted error in development console
     console.error("[ATELIER OBSERVABILITY ERROR]:", errorPayload);
 
-    // 2. Sentry Forwarding (if configured via environment variable)
+    // 2. Sentry Forwarding (if configured)
     if (typeof window !== "undefined" && window.Sentry) {
       try {
         window.Sentry.captureException(error || new Error(errorPayload.message), {

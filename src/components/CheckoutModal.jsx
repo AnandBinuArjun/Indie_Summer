@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useStore } from "../context/StoreContext";
+import { trackPurchase, trackInitiateCheckout, trackAddPaymentInfo } from "./Analytics";
 
 // Dynamically load official Razorpay SDK script
 function loadRazorpayScript() {
@@ -84,6 +85,17 @@ export default function CheckoutModal() {
       // ignore
     }
   }, []);
+
+  // Track InitiateCheckout in GA4 & Meta Pixel
+  useEffect(() => {
+    if (checkoutOpen && items.length > 0) {
+      try {
+        trackInitiateCheckout(items, total);
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, [checkoutOpen]);
 
   const total = getCartTotal();
   const netSilhouetteValue = Math.round(total / 1.05);
@@ -235,29 +247,65 @@ export default function CheckoutModal() {
   };
 
   const finalizeOrder = async (generatedOrder, confirmedPaymentId, paymentStatus) => {
+    const orderPayload = {
+      orderRef: generatedOrder,
+      customerName: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+      customerEmail: formData.email.trim(),
+      customerPhone: formData.phone.trim(),
+      customerAddress: `${formData.address.trim()}`,
+      customerCity: formData.city.trim(),
+      customerPincode: formData.postalCode.trim(),
+      paymentMethod: "RAZORPAY GATEWAY",
+      paymentId: confirmedPaymentId,
+      paymentStatus: paymentStatus,
+      totalAmountINR: total,
+      items: items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        code: it.code,
+        priceINR: it.priceINR,
+        selectedSize: it.selectedSize || "One Size",
+        imagePrimary: it.imagePrimary,
+        quantity: it.quantity || 1
+      }))
+    };
+
     if (createOrder) {
-      await createOrder({
-        orderRef: generatedOrder,
-        customerName: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
-        customerEmail: formData.email.trim(),
-        customerPhone: formData.phone.trim(),
-        customerAddress: `${formData.address.trim()}`,
-        customerCity: formData.city.trim(),
-        customerPincode: formData.postalCode.trim(),
-        paymentMethod: "RAZORPAY GATEWAY",
-        paymentId: confirmedPaymentId,
-        paymentStatus: paymentStatus,
-        totalAmountINR: total,
-        items: items.map((it) => ({
-          id: it.id,
-          name: it.name,
-          code: it.code,
-          priceINR: it.priceINR,
-          selectedSize: it.selectedSize || "One Size",
-          imagePrimary: it.imagePrimary,
-          quantity: it.quantity || 1
-        }))
+      await createOrder(orderPayload);
+    }
+
+    // Trigger Automated Transactional Email & SMS / WhatsApp Invoice
+    try {
+      fetch("/api/notifications/order-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_ref: generatedOrder,
+          customer_name: orderPayload.customerName,
+          customer_email: orderPayload.customerEmail,
+          customer_phone: orderPayload.customerPhone,
+          customer_address: orderPayload.customerAddress,
+          customer_city: orderPayload.customerCity,
+          customer_pincode: orderPayload.customerPincode,
+          payment_method: orderPayload.paymentMethod,
+          payment_id: confirmedPaymentId,
+          total_amount_inr: total,
+          items: orderPayload.items
+        })
+      }).catch((err) => console.warn("Background confirmation email notice:", err));
+    } catch (e) {
+      // background non-blocking
+    }
+
+    // Track Ecommerce Purchase Event in GA4 & Meta Pixel
+    try {
+      trackPurchase({
+        order_ref: generatedOrder,
+        total_amount_inr: total,
+        items: orderPayload.items
       });
+    } catch (err) {
+      console.warn("Analytics purchase tracking error:", err);
     }
 
     try {

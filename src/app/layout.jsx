@@ -9,6 +9,8 @@ import SearchModal from "../components/SearchModal";
 import CheckoutModal from "../components/CheckoutModal";
 import ProductDetailModal from "../components/ProductDetailModal";
 import CookieBanner from "../components/CookieBanner";
+import Analytics from "../components/Analytics";
+import "../lib/logger";
 
 export const viewport = {
   width: "device-width",
@@ -78,6 +80,7 @@ export default function RootLayout({ children }) {
           <CheckoutModal />
           <ProductDetailModal />
           <CookieBanner />
+          <Analytics />
         </StoreProvider>
       </body>
     </html>

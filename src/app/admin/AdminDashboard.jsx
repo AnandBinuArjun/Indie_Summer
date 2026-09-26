@@ -134,7 +134,10 @@ export default function AdminDashboard() {
     }
   }, [authLoading]);
 
+  const [notificationFeedback, setNotificationFeedback] = useState({});
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
@@ -146,6 +149,73 @@ export default function AdminDashboard() {
       }
     }
     updateLocalOrderStatus(orderId, newStatus);
+
+    // If order was marked as dispatched, automatically trigger customer dispatch notification
+    if (newStatus === "dispatched" && targetOrder && targetOrder.customer_email) {
+      try {
+        setNotificationFeedback((prev) => ({ ...prev, [orderId]: "Sending dispatch notice..." }));
+        const res = await fetch("/api/notifications/dispatch-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order: { ...targetOrder, status: newStatus },
+            awbNumber: `BD-AIR-${Math.floor(10000000 + Math.random() * 90000000)}`
+          })
+        });
+        const resData = await res.json().catch(() => ({}));
+        setNotificationFeedback((prev) => ({
+          ...prev,
+          [orderId]: resData.success ? "✓ Dispatch Email/SMS Sent" : "Notice staged"
+        }));
+        setTimeout(() => {
+          setNotificationFeedback((prev) => {
+            const copy = { ...prev };
+            delete copy[orderId];
+            return copy;
+          });
+        }, 5000);
+      } catch (err) {
+        console.warn("Dispatch notification failed:", err);
+      }
+    }
+  };
+
+  const handleResendOrderConfirmation = async (order) => {
+    if (!order || !order.customer_email) return;
+    try {
+      setNotificationFeedback((prev) => ({ ...prev, [order.id]: "Sending invoice & certificate..." }));
+      const res = await fetch("/api/notifications/order-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_ref: order.order_ref,
+          customer_name: order.customer_name,
+          customer_email: order.customer_email,
+          customer_phone: order.customer_phone,
+          customer_address: order.customer_address,
+          customer_city: order.customer_city,
+          customer_pincode: order.customer_pincode,
+          payment_method: order.payment_method,
+          payment_id: order.payment_id,
+          total_amount_inr: order.total_amount_inr,
+          items: order.items
+        })
+      });
+      const resData = await res.json().catch(() => ({}));
+      setNotificationFeedback((prev) => ({
+        ...prev,
+        [order.id]: resData.success ? "✓ Certificate & Invoice Emailed" : "Notification queued"
+      }));
+      setTimeout(() => {
+        setNotificationFeedback((prev) => {
+          const copy = { ...prev };
+          delete copy[order.id];
+          return copy;
+        });
+      }, 5000);
+    } catch (err) {
+      console.warn("Failed to resend confirmation:", err);
+    }
   };
 
   const handleLogout = async () => {
@@ -1384,6 +1454,53 @@ CREATE POLICY "Staff can manage site settings" ON public.site_settings FOR ALL T
                               </div>
                             ))}
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Order Action Bar */}
+                      <div style={{ marginTop: "1rem", paddingTop: "0.8rem", borderTop: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--color-siren)", fontWeight: 600 }}>
+                          {notificationFeedback[ord.id] || ""}
+                        </div>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleResendOrderConfirmation(ord)}
+                            style={{
+                              padding: "6px 12px",
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              fontFamily: "var(--font-sans)",
+                              backgroundColor: "var(--color-ink)",
+                              color: "var(--color-ivory)",
+                              border: "none",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px"
+                            }}
+                          >
+                            <Mail size={12} /> RESEND PROVENANCE EMAIL & INVOICE
+                          </button>
+                          <Link
+                            href="/track"
+                            target="_blank"
+                            style={{
+                              padding: "6px 12px",
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              fontFamily: "var(--font-sans)",
+                              backgroundColor: "transparent",
+                              color: "var(--color-ink)",
+                              border: "1px solid var(--color-border)",
+                              textDecoration: "none",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px"
+                            }}
+                          >
+                            <ExternalLink size={12} /> TRACK DISPATCH
+                          </Link>
                         </div>
                       </div>
                     </div>

@@ -136,6 +136,81 @@ export function StoreProvider({ children }) {
     loadFromSupabase();
   }, []);
 
+  // Supabase Realtime WebSocket Stream for live bids and product updates across all devices
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const channel = supabase
+      .channel("atelier_realtime_stream")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "bids" },
+        (payload) => {
+          const newBidRow = payload.new;
+          if (!newBidRow || !newBidRow.product_id) return;
+
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === newBidRow.product_id
+                ? {
+                    ...p,
+                    currentBidINR: Math.max(Number(newBidRow.amount_inr || 0), p.currentBidINR || 0),
+                    bidsCount: (p.bidsCount || 0) + 1
+                  }
+                : p
+            )
+          );
+
+          setBidsData((prev) => {
+            const existing = prev[newBidRow.product_id] || {};
+            const history = existing.bidsHistory || [];
+            const mappedBid = {
+              id: `bid-${newBidRow.id || Date.now()}`,
+              bidder: newBidRow.bidder_name,
+              amount: Number(newBidRow.amount_inr),
+              time: "Just now"
+            };
+            return {
+              ...prev,
+              [newBidRow.product_id]: {
+                currentBidINR: Math.max(Number(newBidRow.amount_inr || 0), existing.currentBidINR || 0),
+                bidsCount: (existing.bidsCount || 0) + 1,
+                bidsHistory: [mappedBid, ...history]
+              }
+            };
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "products" },
+        (payload) => {
+          const updated = payload.new;
+          if (!updated) return;
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === updated.id
+                ? {
+                    ...p,
+                    name: updated.name || p.name,
+                    priceINR: Number(updated.price_inr ?? p.priceINR),
+                    currentBidINR: Number(updated.current_bid_inr ?? p.currentBidINR),
+                    bidsCount: updated.bids_count ?? p.bidsCount,
+                    status: updated.status ?? p.status,
+                    auctionEndTime: updated.auction_end_time ?? p.auctionEndTime
+                  }
+                : p
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem("indie_summer_cart", JSON.stringify(cart));
@@ -302,7 +377,7 @@ export function StoreProvider({ children }) {
     }
   };
 
-  const placeBid = async (product, bidAmountINR, bidderName = "You (Verified Patron)") => {
+  const placeBid = async (product, bidAmountINR, bidderName = "You (Verified Patron)", contactInfo = {}) => {
     const info = getBiddingInfo(product);
     if (!info) return { success: false, message: "This piece is not open for bidding." };
 
@@ -314,17 +389,21 @@ export function StoreProvider({ children }) {
       };
     }
 
+    const existing = bidsData[product.id] || {};
+    const previousLeadingBid = existing.bidsHistory?.[0];
+
     const newBid = {
       id: `bid-${Date.now()}`,
       bidder: bidderName,
       amount: bidAmountINR,
+      email: contactInfo.email || "",
+      phone: contactInfo.phone || "",
       time: "Just now"
     };
 
     setBidsData((prev) => {
-      const existing = prev[product.id] || {};
       const history = [newBid, ...(existing.bidsHistory || product.bidsHistory || [])];
-      return {
+      const updated = {
         ...prev,
         [product.id]: {
           currentBidINR: bidAmountINR,
@@ -332,6 +411,10 @@ export function StoreProvider({ children }) {
           bidsHistory: history
         }
       };
+      try {
+        localStorage.setItem("indie_summer_bids", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
     });
 
     // Update in products state as well
@@ -365,6 +448,31 @@ export function StoreProvider({ children }) {
           .eq("id", product.id);
       } catch (e) {
         console.warn("Supabase bid insert note:", e);
+      }
+    }
+
+    // Trigger Outbid Alert Notification to previous leading bidder if outbid
+    if (previousLeadingBid && previousLeadingBid.bidder !== bidderName) {
+      const outbidTargetEmail = previousLeadingBid.email || (previousLeadingBid.bidder?.includes("@") ? previousLeadingBid.bidder : null);
+      if (outbidTargetEmail || previousLeadingBid.phone) {
+        try {
+          fetch("/api/notifications/outbid-alert", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              bidderEmail: outbidTargetEmail,
+              bidderPhone: previousLeadingBid.phone,
+              bidderName: previousLeadingBid.bidder,
+              relicName: product.name,
+              relicCode: product.code,
+              currentBidINR: bidAmountINR,
+              productId: product.id,
+              timeRemaining: "Auction Concluding Soon"
+            })
+          }).catch((err) => console.warn("Outbid alert delivery notice:", err));
+        } catch (e) {
+          // background
+        }
       }
     }
 
